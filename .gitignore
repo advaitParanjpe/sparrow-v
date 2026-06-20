@@ -1,0 +1,39 @@
+# Editor and operating-system files
+.DS_Store
+*.swp
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+
+# Simulation and compilation outputs
+build/
+sim/build/
+*.vcd
+*.fst
+*.wlf
+*.log
+*.jou
+*.str
+*.bit
+*.bin
+*.elf
+*.hex
+*.mem
+
+# Implementation tool outputs (configuration/source files remain tracked)
+results/*
+!results/**/.gitkeep
+synth/**/build/
+synth/**/reports/
+openlane/**/runs/
+fpga/**/.Xil/
+fpga/**/*.runs/
+
+# IDE settings
+.idea/
+.vscode/
