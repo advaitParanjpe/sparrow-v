@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted — reservation only, Phase 1.
 
 ## Context
 
@@ -16,7 +16,7 @@ Sparrow-V requires custom vector instructions but does not define exact opcode, 
 
 ## Decision
 
-Not decided. The expected default is a documented RISC-V custom opcode allocation, but no final bits are assigned in Phase 0.
+Reserve standard RISC-V custom-0 major opcode `0001011` for future Sparrow-V vector instructions. Phase 1 decodes no custom instruction and traps this opcode as illegal.
 
 ## Consequences
 
@@ -24,4 +24,4 @@ The selected table must be the single source mirrored by decoder, software helpe
 
 ## Unresolved questions
 
-How are vector register indices, scalar destinations, metadata operands, configuration operations, and reserved/illegal encodings represented?
+All vector instruction fields remain unresolved until Phase 3.

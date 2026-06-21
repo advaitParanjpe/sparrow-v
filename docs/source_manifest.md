@@ -26,7 +26,24 @@ The original planning documents remain unmodified in `sparrow-v-project-plan/` a
 
 ## Phase 0 derived documents
 
+- [Repository architecture](architecture.md)
+- [Current milestone template](current_milestone.md)
+- [Implementation status](implementation_status.md)
+- [Verification plan](verification_plan.md)
+- [Milestone history](milestone_history.md)
+- [Codex milestone prompt](codex_milestone_prompt.md)
+
 - [Open questions and inconsistencies](architecture/open_questions.md)
 - [Phase dependency map](architecture/phase_dependencies.md)
 - [Phase 0 repository setup report](build_reports/phase_0_repository_setup.md)
 - [Decision records](decisions/)
+- [Phase 1 scalar contract](architecture/scalar_core.md)
+- [Phase 1 memory interface](architecture/memory_interface.md)
+- [Phase 1 trap behavior](architecture/trap_behavior.md)
+- [Phase 1 verification plan](verification/scalar_phase_1.md)
+- [Phase 1 scalar baseline report](build_reports/phase_1_scalar_baseline.md)
+- [Phase 1.5 scalar audit](build_reports/phase_1_5_audit.md)
+- [Phase 1.6 fetch frontend](architecture/fetch_frontend.md)
+- [Phase 1.7 pipeline proof](build_reports/phase_1_7_pipeline_proof.md)
+- [Phase 1.8b integer development pipeline](build_reports/phase_1_8b_integer_pipeline.md)
+- [Phase 1.8c development control flow](build_reports/phase_1_8c_control_flow.md)

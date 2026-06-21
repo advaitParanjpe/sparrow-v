@@ -28,7 +28,7 @@ Phases 1–7 verified behavior and Phase 8 regression evidence
 
 | Phase | Required frozen decisions | Not blocked by |
 | --- | --- | --- |
-| 1 — Scalar core | ADR-001, ADR-002; RV32I subset/trap/reset details captured in ADR-001/002 consequences | Sparse format, benchmark choice, physical targets |
+| 1 — Scalar core | Accepted ADR-001, ADR-002, ADR-003 reservation, and ADR-008 baseline ordering | Sparse format, benchmark choice, physical targets |
 | 2 — C bring-up | Phase 1 architectural contract; linker/load-image and exit ABI | Vector datapath details |
 | 3 — Extension interface | ADR-003, ADR-004 | Scratchpad arbitration and sparse packing |
 | 4 — Dense vector | ADR-004, ADR-005, ADR-006 | Sparse metadata and benchmark selection |

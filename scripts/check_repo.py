@@ -140,7 +140,7 @@ def main() -> int:
             print(f"- {error}")
         return 1
     scope = "documentation" if args.docs_only else "repository structure and documentation"
-    print(f"Phase 0 {scope} checks passed: {root}")
+    print(f"{scope.capitalize()} checks passed: {root}")
     return 0
 
 

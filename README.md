@@ -6,7 +6,7 @@ Sparrow-V is a planned compact RV32I processor with a tightly coupled custom vec
 
 ## Current phase
 
-**Phase 0 — repository and specification freeze.** RTL implementation has not started. There are no functional CPU, vector, sparse, memory, simulation, synthesis, FPGA, or ASIC results in this repository.
+**Phase 1 — scalar RV32I baseline.** The original three-stage scalar RTL and directed simulation are implemented. Vector, sparse, scratchpad, FPGA, and ASIC implementation have not started.
 
 ## Planned subsystems
 
@@ -30,7 +30,7 @@ Sparrow-V is a programmable CPU/vector architecture, not another fixed-function 
 
 ## Expected toolchain
 
-Phase 0 checks require Python 3 standard library and GNU Make. Later phases plan to use a RISC-V bare-metal toolchain, Verilator and/or Icarus Verilog, Vivado, Yosys, and OpenLane/OpenROAD; none is required or claimed usable yet.
+Checks require Python 3, GNU Make, Icarus Verilog, and Verilator. A RISC-V bare-metal compiler is needed to build `sw/tests/scalar_smoke.S`; this environment does not currently provide one. Later phases plan Vivado, Yosys, and OpenLane/OpenROAD.
 
 ## Initial commands
 
@@ -39,6 +39,7 @@ make check
 make docs-check
 make status
 make test
+make sim-scalar
 ```
 
 The planning source manifest is [docs/source_manifest.md](docs/source_manifest.md). Architectural choices that still require approval are tracked in [docs/architecture/open_questions.md](docs/architecture/open_questions.md) and `docs/decisions/`.

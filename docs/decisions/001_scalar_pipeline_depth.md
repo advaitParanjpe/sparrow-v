@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted — Phase 1.
 
 ## Context
 
@@ -15,7 +15,7 @@ The plan permits either a three-stage or five-stage single-issue in-order RV32I 
 
 ## Decision
 
-Not decided. Select one pipeline and record the exact Phase 1 RV32I subset, aligned-access/trap policy, reset polarity, memory response assumptions, and program-loading format in the accepted record.
+Use a from-scratch, three-stage IF/DX/MW single-issue in-order core. `rst_n` is synchronous active-low. The accepted ISA, traps, counters, and memory contract are in `docs/architecture/scalar_core.md`.
 
 ## Consequences
 
@@ -23,4 +23,4 @@ The choice changes hazard, forwarding, branch-flush, load-use, verification, and
 
 ## Unresolved questions
 
-Which instructions and CSRs are mandatory for the first executable program, and how do illegal or misaligned accesses report failure?
+None for Phase 1; CSR instruction access and a full privileged architecture are deliberately deferred.

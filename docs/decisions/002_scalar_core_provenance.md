@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted — Phase 1.
 
 ## Context
 
@@ -15,7 +15,7 @@ The project prioritizes an understandable core but recognizes schedule risk in b
 
 ## Decision
 
-Not decided. Do not import third-party CPU RTL until this record is accepted and the exact upstream license, revision, attribution, and modification boundary are approved.
+Implement the scalar CPU from scratch in this repository. No external functional CPU RTL is imported or copied.
 
 ## Consequences
 
@@ -23,4 +23,4 @@ New RTL maximizes architectural ownership but costs bring-up time. Adaptation ma
 
 ## Unresolved questions
 
-Does the project schedule justify a from-scratch implementation after the Phase 1 instruction subset is frozen?
+None for Phase 1.
