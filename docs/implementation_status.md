@@ -10,6 +10,7 @@
 
 - `rtl/core/rv32_core_pipe.sv` and focused development testbenches document ALU/control-flow behavior, forwarding, fetch generations, and backpressure experiments. This implementation is isolated and has not replaced the production core.
 - Development memory behavior is experimental. The focused `make test-scalar-pipe-memory` regression passed in this checkpoint after its test data was corrected, but it is not production integration evidence.
+- Differential verification is implemented for the shared normal subset: deterministic smoke, 32 immediate-memory seeds, and seed 17 under request-backpressure, delayed-response, and mixed modes. It compares retirement/register/store traces plus final register, memory, and terminal state. The pipeline remains experimental; this is not formal equivalence.
 
 ## Planned, not implemented
 

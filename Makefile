@@ -4,7 +4,7 @@ RTL_SOURCES := $(shell find rtl -name '*.sv' | sort)
 SCALAR_TB := tb/integration/tb_scalar_core.sv
 SIM_BUILD := sim/build
 
-.PHONY: check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect clean
+.PHONY: check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure clean
 
 .PHONY: test-scalar-pipe-dev
 test-scalar-pipe-dev:
@@ -40,6 +40,39 @@ test-scalar-pipe-memory:
 	$(SIM_BUILD)/tb_scalar_pipe_memory.vvp
 
 test-scalar-pipe-memory-stall: test-scalar-pipe-memory
+
+DIFF_TB := tb/integration/tb_scalar_differential.sv
+DIFF_RTL := rtl/common/sparrowv_scalar_pkg.sv rtl/core/rv32_alu.sv rtl/core/rv32_decoder.sv rtl/core/rv32_immediate.sv rtl/core/rv32_regfile.sv rtl/core/rv32_core.sv rtl/core/rv32_core_pipe.sv
+SEED ?= 1
+MODE ?= 0
+
+test-scalar-diff-seed:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -Wall -s tb_scalar_differential -Ptb_scalar_differential.SEED=$(SEED) -Ptb_scalar_differential.MODE=$(MODE) -o $(SIM_BUILD)/tb_scalar_differential.vvp $(DIFF_RTL) $(DIFF_TB)
+	$(SIM_BUILD)/tb_scalar_differential.vvp
+
+test-scalar-diff-smoke: test-scalar-diff-seed
+
+test-scalar-diff-random:
+	@mkdir -p $(SIM_BUILD)
+	@for seed in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32; do \
+		iverilog -g2012 -Wall -s tb_scalar_differential -Ptb_scalar_differential.SEED=$$seed -Ptb_scalar_differential.MODE=0 -o $(SIM_BUILD)/tb_scalar_differential.vvp $(DIFF_RTL) $(DIFF_TB) && $(SIM_BUILD)/tb_scalar_differential.vvp || exit $$?; \
+	done
+
+test-scalar-diff-stall:
+	@mkdir -p $(SIM_BUILD)
+	@for mode in 1 2 3; do \
+		iverilog -g2012 -Wall -s tb_scalar_differential -Ptb_scalar_differential.SEED=17 -Ptb_scalar_differential.MODE=$$mode -o $(SIM_BUILD)/tb_scalar_differential.vvp $(DIFF_RTL) $(DIFF_TB) && $(SIM_BUILD)/tb_scalar_differential.vvp || exit $$?; \
+	done
+
+test-scalar-diff-negative:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -Wall -s tb_scalar_differential -Ptb_scalar_differential.SEED=1 -Ptb_scalar_differential.MODE=0 -Ptb_scalar_differential.NEGATIVE=1 -o $(SIM_BUILD)/tb_scalar_differential_negative.vvp $(DIFF_RTL) $(DIFF_TB)
+	$(SIM_BUILD)/tb_scalar_differential_negative.vvp
+
+# Focused reproducer for stale response + redirect + held request (seed 17).
+test-scalar-diff-redirect-backpressure:
+	$(MAKE) test-scalar-diff-seed SEED=17 MODE=1
 
 check:
 	$(PYTHON) scripts/check_repo.py --all

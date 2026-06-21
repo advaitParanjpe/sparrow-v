@@ -46,7 +46,9 @@ module rv32_core_pipe #(parameter logic [31:0] RESET_PC=0, parameter logic [31:0
     case(dx_mem_size) SZ_BYTE: begin dx_store_wdata=dx_store_data<<(8*dx_mem_addr[1:0]);dx_store_wstrb=4'b0001<<dx_mem_addr[1:0];end SZ_HALF: begin dx_store_wdata=dx_store_data<<(16*dx_mem_addr[1]);dx_store_wstrb=dx_mem_addr[1]?4'b1100:4'b0011;end default: begin dx_store_wdata=dx_store_data;dx_store_wstrb=4'b1111;end endcase
     dx_mem_misaligned=dx_mem&&((dx_mem_size==SZ_HALF&&dx_mem_addr[0])||(dx_mem_size==SZ_WORD&&|dx_mem_addr[1:0]));
     dx_misaligned=((dx_branch||dx_jal||dx_jalr)&&(|dx_target[1:0]))||dx_mem_misaligned;
-    dx_redirect=dx_v&&!dx_illegal&&!dx_misaligned&&(dx_jal||dx_jalr||(dx_branch&&dx_branch_taken));
+    // A held DX control instruction may not redirect repeatedly while an older
+    // memory operation blocks MW.  Redirect only on the DX-to-MW transfer.
+    dx_redirect=dx_v&&mw_ready&&!dx_illegal&&!dx_misaligned&&(dx_jal||dx_jalr||(dx_branch&&dx_branch_taken));
     dx_terminal=dx_ecall||dx_illegal||dx_misaligned; dx_cause=dx_misaligned?32'd0:(dx_illegal?32'd2:32'd11);
     if(dx_lui) dx_y=dx_imm; else if(dx_auipc) dx_y=dx_pc+dx_imm; else if(dx_jal||dx_jalr) dx_y=dx_pc+4; else dx_y=dx_alu_y;
   end
@@ -83,6 +85,10 @@ module rv32_core_pipe #(parameter logic [31:0] RESET_PC=0, parameter logic [31:0
         fetch_gen<=fetch_gen+1; if_v<=0; control_flush_cycles<=control_flush_cycles+1; wrong_path_fetches<=wrong_path_fetches+(if_v?1:0);
         if(dx_branch) taken_branch_redirects<=taken_branch_redirects+1;
         if(resp_fire) begin stale_responses<=stale_responses+1; wrong_path_fetches<=wrong_path_fetches+1; end
+        // A stale response may complete while a younger request is still held
+        // under backpressure.  Retire the old outstanding slot in that case;
+        // otherwise out_v would permanently mask the held request.
+        if(resp_fire&&!req_fire) out_v<=0;
         if(req_fire) begin out_v<=1;out_addr<=req_addr;out_gen<=req_gen;req_addr<=dx_target;req_gen<=fetch_gen+1;req_v<=1;redirect_pending<=0;end
         else if(imem_req_valid) begin redirect_pending<=1;pending_target<=dx_target;end
         else begin req_addr<=dx_target;req_gen<=fetch_gen+1;req_v<=1;redirect_pending<=0;if(resp_fire) out_v<=0;end
