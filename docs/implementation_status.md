@@ -11,7 +11,7 @@
 - `rtl/core/rv32_core_pipe.sv` and focused development testbenches document ALU/control-flow behavior, forwarding, fetch generations, and backpressure experiments. This implementation is isolated and has not replaced the production core.
 - Development memory behavior is experimental. The focused `make test-scalar-pipe-memory` regression passed in this checkpoint after its test data was corrected, but it is not production integration evidence.
 - Focused pipeline terminal-trap verification is available as `make test-scalar-pipe-trap`. It directly covers control-target, LH/LW, and SH/SW misalignment causes, fault PCs, suppressed load/store side effects, terminal retirement, and x0 preservation.
-- Differential verification is implemented for the shared normal subset: deterministic smoke, 32 immediate-memory seeds, and seed 17 under request-backpressure, delayed-response, and mixed modes. It compares retirement/register/store traces plus final register, memory, and terminal state. The pipeline remains experimental; this is not formal equivalence.
+- Differential verification covers the shared normal subset, including LB/LBU/LH/LHU/LW and SB/SH/SW. The harness checks normalized retirement/register/store traces, final register/memory/terminal state, directed extension and partial-store effects, including an immediate LHU-dependent ADDI, and memory-focused controlled-negative detection. The final 128-seed immediate campaign completed in 7.08 seconds wall time; seed 17 passes request-backpressured, delayed-response, and mixed modes. The pipeline remains experimental; this is not formal equivalence.
 
 ## Planned, not implemented
 
@@ -25,6 +25,7 @@ Vector engine/ISA, vector memory, INT8/INT16 lanes, masks/reductions/dot product
 | Development pipeline | `rtl/core/rv32_core_pipe.sv`, `tb/integration/tb_scalar_pipe_*.sv` | focused `make test-scalar-pipe-*` targets |
 | Repository checks | `scripts/check_repo.py`, `tb/tests/` | `make check`, `make test-repo` |
 | Lint | all `rtl/**/*.sv` | `make lint` |
+| Subword differential verification | `tb/integration/tb_scalar_differential.sv` | `make test-scalar-diff-subword-directed`, `make test-scalar-diff-subword-random`, `make test-scalar-diff-subword-stall` |
 
 ## Environmental blockers
 

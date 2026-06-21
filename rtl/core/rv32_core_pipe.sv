@@ -61,7 +61,7 @@ module rv32_core_pipe #(parameter logic [31:0] RESET_PC=0, parameter logic [31:0
   assign imem_req_valid=req_v&&(!out_v||(imem_resp_valid&&imem_resp_ready))&&!mw_terminal&&!trap_valid; assign imem_req_addr=req_addr; assign req_fire=imem_req_valid&&imem_req_ready;
   // A response is always consumed when stale; only a current-generation response may occupy IF.
   assign imem_resp_ready=out_v&&((out_gen!=fetch_gen)||dx_redirect||!if_v||if_to_dx); assign resp_fire=imem_resp_valid&&imem_resp_ready;
-  assign dmem_req_valid=mw_v&&mw_mem&&mw_mem_state==0; assign dmem_req_write=mw_store; assign dmem_req_addr=mw_addr; assign dmem_req_wdata=mw_wdata; assign dmem_req_wstrb=mw_wstrb; assign dmem_resp_ready=mw_v&&mw_mem&&!mw_store&&mw_mem_state==1; assign dmem_req_fire=dmem_req_valid&&dmem_req_ready;assign dmem_resp_fire=dmem_resp_valid&&dmem_resp_ready;
+  assign dmem_req_valid=mw_v&&mw_mem&&mw_mem_state==0; assign dmem_req_write=mw_store; assign dmem_req_addr={mw_addr[31:2],2'b00}; assign dmem_req_wdata=mw_wdata; assign dmem_req_wstrb=mw_wstrb; assign dmem_resp_ready=mw_v&&mw_mem&&!mw_store&&mw_mem_state==1; assign dmem_req_fire=dmem_req_valid&&dmem_req_ready;assign dmem_resp_fire=dmem_resp_valid&&dmem_resp_ready;
   always_comb begin case(mw_mem_size) SZ_BYTE: load_data=mw_load_unsigned?{24'd0,dmem_resp_data[8*mw_addr[1:0]+:8]}:{{24{dmem_resp_data[8*mw_addr[1:0]+7]}},dmem_resp_data[8*mw_addr[1:0]+:8]}; SZ_HALF: load_data=mw_load_unsigned?{16'd0,dmem_resp_data[16*mw_addr[1]+:16]}:{{16{dmem_resp_data[16*mw_addr[1]+15]}},dmem_resp_data[16*mw_addr[1]+:16]}; default: load_data=dmem_resp_data; endcase end
   assign retire_mem_we=0; assign retire_mem_addr=0; assign retire_mem_data=0; assign retire_mem_wstrb=0;
 
