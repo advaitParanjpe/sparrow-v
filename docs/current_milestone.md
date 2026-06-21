@@ -1,55 +1,126 @@
-# Expand scalar differential verification to full supported load/store and trap coverage
+# Add full subword load/store differential coverage for the scalar pipeline
 
 ## Status
 
-Approved bounded verification milestone. `rtl/core/rv32_core.sv` remains the production/reference core and `rtl/core/rv32_core_pipe.sv` remains experimental. The executor must begin from a clean, attributable tree; otherwise stop for human review.
+Approved bounded verification milestone. `rtl/core/rv32_core.sv` remains the protected production/reference core and must not change. `rtl/core/rv32_core_pipe.sv` remains experimental and is compared only through the existing deterministic differential framework; this milestone does not promote or integrate it.
 
 ## Objective and motivation
 
-Extend deterministic differential verification so both scalar cores are compared across all currently supported load/store widths and supported terminal behavior. The current campaign covers LW/SW, scalar ALU/control flow, ECALL, and deterministic memory timing modes, but not the full subword-memory or trap surface. This strengthens the scalar foundation before any production-pipeline promotion or vector-interface work. It is not formal equivalence and does not make the pipeline production-ready.
+Extend deterministic scalar differential verification so `rv32_core` and `rv32_core_pipe` are compared across every currently supported scalar memory width and memory-data formatting behavior. The current differential campaign covers scalar ALU/control flow, LUI/AUIPC, LW/SW, ECALL, deterministic seeds, immediate/delayed/backpressured/mixed memory modes, final register and memory comparison, and controlled register-focused negative testing. Focused pipeline trap regressions also establish matching causes for instruction/control-target misalignment (0), load misalignment (4), and store misalignment (6).
 
-## Current baseline
-
-Existing differential commands are `test-scalar-diff-smoke`, `test-scalar-diff-random` (32 immediate-mode seeds), `test-scalar-diff-stall` (seed 17 modes 1–3), `test-scalar-diff-seed`, `test-scalar-diff-negative`, and `test-scalar-diff-redirect-backpressure`. The active campaign covers LUI/AUIPC, listed scalar ALU operations, all branches, JAL/JALR, LW/SW, and ECALL. It compares normalized retirement/register/store/final-memory/terminal effects, not cycles. The redirect/backpressure phantom-outstanding-fetch bug is covered by the focused seed-17 target.
+The work strengthens the scalar-memory verification base before any production-pipeline promotion. It is not formal equivalence and does not change the pipeline's experimental status.
 
 ## In scope
 
-- Differential coverage for LB, LBU, LH, LHU, LW, SB, SH, and SW.
-- Little-endian byte lanes, byte enables, sign/zero extension, partial-store preservation, loads to x0, and store-without-register-write checks.
-- Load-use ALU, branch/address, mixed-width, store-to-load, backpressured, delayed-response, and mixed-mode cases.
-- Directed aligned/misaligned halfword and word access, illegal instruction, ECALL, and EBREAK categories where behavior is common and directly validated.
-- Trap occurrence, cause, PC, and no-side-effect comparison.
-- Deterministic subword random generation, saved/reproducible seeds, improved mismatch diagnostics, an extended bounded campaign justified by measured runtime, and memory-focused controlled negative detection if practical.
-- Documentation, verification-plan, and milestone-history updates.
+- Differential directed and deterministic randomized coverage for LB, LBU, LH, LHU, LW, SB, SH, and SW.
+- Signed and unsigned subword extension, byte-lane selection, store byte enables, and preservation of untouched bytes after partial stores.
+- Loads to x0, stores without a destination-register write, load-use dependencies, mixed-width sequences, and store-to-load memory semantics.
+- Valid byte offsets 0/1/2/3 and valid halfword offsets 0/2, sign-bit-set data patterns, and valid in-range aligned random accesses.
+- Immediate-memory, request-backpressure, delayed-response, and mixed stall/delay modes.
+- Deterministic seed reproduction, actionable mismatch diagnostics, a measured larger bounded random campaign, and memory-focused controlled negative detection.
+- Factual documentation, verification-plan, scalar-verification, and milestone-history updates made when the implementation is complete.
 
 ## Out of scope
 
-- Production integration/replacement; vector, sparse, scratchpad, cache, DMA, branch prediction, multiple outstanding memory operations, compiler/runtime, FPGA/ASIC, performance benchmarking, formal-equivalence claims, broad pipeline redesign, or unrelated new ISA behavior.
-
-## Actual supported behavior to validate
-
-The shared decoder supports LB/LH/LW/LBU/LHU and SB/SH/SW. Byte accesses are unaligned-permitted; halfwords require address bit 0 clear; words require bits [1:0] clear. Data is little-endian and stores use lane strobes. Signed loads sign-extend; unsigned loads zero-extend. x0 writes are discarded. The production trap contract specifies causes: instruction misalignment 0, illegal 2, EBREAK 3, load misalignment 4, store misalignment 6, ECALL 11. The executor must directly establish matching pipeline behavior before treating any trap category as common.
+- New trap architecture or new trap-development work; existing trap regressions must remain passing.
+- Production integration/replacement of `rv32_core_pipe`, or any change to `rtl/core/rv32_core.sv` without a reproducible reference-core bug and human approval.
+- Vector ISA/datapath, sparse execution, scratchpad/cache/DMA, branch prediction, multiple outstanding memory requests, compiler/runtime, FPGA/ASIC, formal-equivalence claims, broad pipeline redesign, or new scalar instructions.
 
 ## Architectural constraints
 
-External memory interfaces remain unchanged. Partial stores preserve untouched bytes; faulting or illegal operations must not create register/memory side effects. Cycle timing/counters need not match. Do not weaken tests to force agreement. The reference core must not change unless a reproducible reference-core bug is found and human review approves action.
+- Existing memory interfaces and little-endian behavior remain unchanged.
+- Byte enables must match access size and address offset. SB and SH preserve all untouched bytes.
+- Signed loads sign-extend; unsigned loads zero-extend; LW returns the correct word.
+- Loads to x0 do not alter architectural state. Stores do not write a destination register.
+- Request/response handling remains correct under stalls and delays, with no duplicate memory request, writeback, or store side effect.
+- Cycle counts need not match between cores; normalized architectural effects do.
+- Normal generated programs use aligned accesses. Misalignment remains covered by the existing focused trap regression, not by new random generation.
 
-## Generation and directed coverage
+## Directed differential coverage
 
-Normal random programs must be seed-reproducible, aligned, bounded, terminating, inside valid test memory, non-self-modifying, and contain patterns for byte lanes and sign bits. Keep illegal/misaligned/ECALL/EBREAK as separate directed categories. Add directed cases for every load/store width, all byte offsets, both valid halfword offsets, neighbouring-byte/halfword preservation, x0 load destination, dependent ALU and branch/address consumers, consecutive mixed-width memory work, store-followed-by-load, all memory timing modes, trap cause/PC, and no fault side effects.
+Add focused differential cases that check architectural retirement/register/store/final-memory effects for:
+
+- LB with positive data and with byte bit 7 set; LBU with byte bit 7 set.
+- LH with positive data and with halfword bit 15 set; LHU with halfword bit 15 set; LW.
+- SB at offsets 0, 1, 2, and 3; SH at offsets 0 and 2; SW.
+- Surrounding-byte preservation after SB and SH.
+- A load to x0.
+- A dependent ALU instruction after each load width, plus a dependent branch or address calculation after representative loads.
+- Consecutive mixed-width loads and stores, and store followed by load from the same address.
+- Subword access under request backpressure, subword load under delayed response, and subword access under mixed stall/delay behavior.
+
+Directed checks must show byte-lane, extension, destination-write, byte-enable, and final-memory effects rather than merely terminal completion.
+
+## Random generation and campaign
+
+Extend the active differential generator with aligned subword loads/stores while retaining deterministic execution from a recorded seed. Generated programs must:
+
+- use valid in-range data-memory addresses, avoid self-modifying code, remain bounded, and guarantee termination;
+- exercise all four byte lanes and both valid halfword offsets;
+- generate values with byte bit 7 and halfword bit 15 set;
+- include all supported load/store widths and report the actual generated instruction mix;
+- preserve failing seeds as reproducible regressions.
+
+Measure runtime before selecting the campaign size. Run more than the existing 32 immediate-mode seeds; 100–250 seeds is acceptable only when the measured runtime is practical. Report exact seed count, runtime, modes, and an exact reproduction command.
+
+## Controlled negative testing
+
+Retain the existing register-focused controlled negative test. Add a memory-focused controlled negative case that intentionally corrupts exactly one load-extension result, store byte enable, or final memory byte. The checker must detect the intended mismatch without relying on timeout.
+
+## Canonical targets to add
+
+Use repository naming conventions and add real Make targets for:
+
+| Purpose | Target to add |
+| --- | --- |
+| Focused subword directed differential smoke | `test-scalar-diff-subword-directed` |
+| Extended deterministic random campaign | `test-scalar-diff-subword-random` |
+| Request-backpressure, delayed-response, and mixed modes | `test-scalar-diff-subword-stall` |
+| Exact seed/mode reproduction | `test-scalar-diff-subword-seed SEED=<n> MODE=<n>` |
+| Memory-focused controlled negative test | `test-scalar-diff-subword-negative` |
+
+The implementation may reuse the existing differential harness and mode encoding, but these targets must be canonical, documented, and self-checking.
 
 ## Required verification
 
-Retain all current scalar, pipeline, and differential commands. Add real canonical targets for subword differential smoke, trap differential smoke, and extended random campaign; document their names when added. Run those plus exact seed rerun, immediate/delayed/backpressured/mixed modes, controlled negative test, `make lint`, `make check`, and `git diff --check`.
+Run and report:
 
-## Measurable acceptance criteria
+- all current production scalar tests;
+- all current focused pipeline tests, including `make test-scalar-pipe-trap`;
+- all current differential tests;
+- the new directed subword differential test, extended randomized campaign, exact-seed rerun, and every memory timing mode;
+- existing register-focused and new memory-focused controlled negative tests;
+- `make lint`, `make check`, and `git diff --check`.
 
-Completion requires every supported load/store width, extension rule, byte-enable and preservation rule, x0 load, load-use case, common trap cause/PC/no-side-effect case, and all memory modes to pass differential comparison. The extended deterministic campaign must report seed count/runtime; exact reproduction and negative detection must work; existing regressions must pass; no external interface changes or production-readiness claim may be made. Update implementation status, verification plan, verification documentation, and factual milestone history. Do not commit or push.
+## Acceptance criteria
+
+The milestone is complete only when:
+
+1. Every supported load and store width is differentially verified.
+2. Signed/unsigned extension, byte enables, partial-store preservation, x0 loads, and load-use behavior are checked.
+3. All valid byte and halfword offsets are exercised.
+4. Immediate, delayed, backpressured, and mixed memory modes pass.
+5. The larger deterministic campaign passes, reports actual mix/seed count/runtime, and supports exact seed reproduction.
+6. Both controlled negative tests detect their intended mismatches.
+7. All prior regressions, including focused pipeline traps, remain passing.
+8. No external interface changes occur and `rtl/core/rv32_core.sv` remains unchanged.
+9. Documentation and milestone history are updated with measured results; no commit or push occurs.
 
 ## Stop conditions
 
-Stop for human review if trap/misalignment/byte-enable/fault-side-effect semantics conflict, a likely reference-core bug appears, an external interface or broad pipeline redesign is needed, unsupported instructions would need to be added, state is not observable without invasive changes, the tree is dirty and attribution is unclear, or required tools fail.
+Stop for human review only if reference and pipeline memory semantics materially conflict, byte-enable behavior is ambiguous, a reference-core bug is found, an external interface change is required, a broad pipeline redesign is required, the supported instruction subset is unclear, or required observability needs invasive interface changes. Missing tests, generator work, or harness implementation are not stop conditions.
+
+## Documentation requirements
+
+On completion, factually update `docs/implementation_status.md`, `docs/verification_plan.md`, relevant scalar verification documentation, and `docs/milestone_history.md`; update `README` only if stable user-facing commands are added. Document the supported subset, directed coverage, randomized instruction mix, campaign size/runtime, memory modes, negative-test evidence, bugs/fixes, remaining blind spots, and why the pipeline remains experimental.
 
 ## Required final report
 
-Report the actual common memory/trap subset, generator and directed cases, comparison/memory constraints, byte-enable and trap checks, seed count/runtime/modes, exact results, negative evidence, bugs/fixes, changed files, diff review, blind spots, continuing experimental limitations, human-review items, and no-commit/no-push confirmation.
+Report:
+
+1. `MILESTONE COMPLETE` or `MILESTONE NOT COMPLETE`.
+2. Directed subword cases and random-generator changes.
+3. Actual tested instruction subset, seed count, runtime, and memory modes.
+4. Negative-test evidence, bugs/fixes, exact commands/results, and documentation updates.
+5. Complete changed-file list, diff-review findings, and remaining limitations.
+6. Confirmation that the reference core was unchanged and that no commit or push occurred.
