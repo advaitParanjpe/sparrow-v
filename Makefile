@@ -4,7 +4,7 @@ RTL_SOURCES := $(shell find rtl -name '*.sv' | sort)
 SCALAR_TB := tb/integration/tb_scalar_core.sv
 SIM_BUILD := sim/build
 
-.PHONY: check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure clean
+.PHONY: check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure clean
 
 .PHONY: test-scalar-pipe-dev
 test-scalar-pipe-dev:
@@ -38,6 +38,11 @@ test-scalar-pipe-memory:
 	@mkdir -p $(SIM_BUILD)
 	iverilog -g2012 -s tb_scalar_pipe_memory -o $(SIM_BUILD)/tb_scalar_pipe_memory.vvp rtl/common/sparrowv_scalar_pkg.sv rtl/core/rv32_alu.sv rtl/core/rv32_decoder.sv rtl/core/rv32_immediate.sv rtl/core/rv32_regfile.sv rtl/core/rv32_core_pipe.sv tb/integration/tb_scalar_pipe_memory.sv
 	$(SIM_BUILD)/tb_scalar_pipe_memory.vvp
+
+test-scalar-pipe-trap:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_scalar_pipe_trap -o $(SIM_BUILD)/tb_scalar_pipe_trap.vvp rtl/common/sparrowv_scalar_pkg.sv rtl/core/rv32_alu.sv rtl/core/rv32_decoder.sv rtl/core/rv32_immediate.sv rtl/core/rv32_regfile.sv rtl/core/rv32_core_pipe.sv tb/integration/tb_scalar_pipe_trap.sv
+	$(SIM_BUILD)/tb_scalar_pipe_trap.vvp
 
 test-scalar-pipe-memory-stall: test-scalar-pipe-memory
 

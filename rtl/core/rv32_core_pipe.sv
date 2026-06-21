@@ -49,11 +49,16 @@ module rv32_core_pipe #(parameter logic [31:0] RESET_PC=0, parameter logic [31:0
     // A held DX control instruction may not redirect repeatedly while an older
     // memory operation blocks MW.  Redirect only on the DX-to-MW transfer.
     dx_redirect=dx_v&&mw_ready&&!dx_illegal&&!dx_misaligned&&(dx_jal||dx_jalr||(dx_branch&&dx_branch_taken));
-    dx_terminal=dx_ecall||dx_illegal||dx_misaligned; dx_cause=dx_misaligned?32'd0:(dx_illegal?32'd2:32'd11);
+    dx_terminal=dx_ecall||dx_illegal||dx_misaligned;
+    if(dx_mem_misaligned) dx_cause=dx_store?32'd6:32'd4;
+    else if(dx_misaligned) dx_cause=32'd0;
+    else dx_cause=dx_illegal?32'd2:32'd11;
     if(dx_lui) dx_y=dx_imm; else if(dx_auipc) dx_y=dx_pc+dx_imm; else if(dx_jal||dx_jalr) dx_y=dx_pc+4; else dx_y=dx_alu_y;
   end
-  assign mw_complete=mw_v&&(!mw_mem||mw_mem_state==2); assign mw_ready=!mw_v||mw_complete; assign dx_ready=mw_ready; assign if_to_dx=if_v&&dx_ready&&!dx_redirect; assign dx_to_mw=dx_v&&mw_ready; assign mw_retire=mw_complete;
-  assign imem_req_valid=req_v&&(!out_v||(imem_resp_valid&&imem_resp_ready)); assign imem_req_addr=req_addr; assign req_fire=imem_req_valid&&imem_req_ready;
+  // A terminal MW entry is the architectural end of execution.  It must not
+  // admit the younger IF/DX entries in the same cycle that it traps.
+  assign mw_complete=mw_v&&(!mw_mem||mw_mem_state==2); assign mw_ready=!mw_v||mw_complete; assign dx_ready=mw_ready; assign if_to_dx=if_v&&dx_ready&&!dx_redirect&&!mw_terminal&&!trap_valid; assign dx_to_mw=dx_v&&mw_ready&&!mw_terminal&&!trap_valid; assign mw_retire=mw_complete;
+  assign imem_req_valid=req_v&&(!out_v||(imem_resp_valid&&imem_resp_ready))&&!mw_terminal&&!trap_valid; assign imem_req_addr=req_addr; assign req_fire=imem_req_valid&&imem_req_ready;
   // A response is always consumed when stale; only a current-generation response may occupy IF.
   assign imem_resp_ready=out_v&&((out_gen!=fetch_gen)||dx_redirect||!if_v||if_to_dx); assign resp_fire=imem_resp_valid&&imem_resp_ready;
   assign dmem_req_valid=mw_v&&mw_mem&&mw_mem_state==0; assign dmem_req_write=mw_store; assign dmem_req_addr=mw_addr; assign dmem_req_wdata=mw_wdata; assign dmem_req_wstrb=mw_wstrb; assign dmem_resp_ready=mw_v&&mw_mem&&!mw_store&&mw_mem_state==1; assign dmem_req_fire=dmem_req_valid&&dmem_req_ready;assign dmem_resp_fire=dmem_resp_valid&&dmem_resp_ready;
