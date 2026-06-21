@@ -1,77 +1,55 @@
-# Differentially verify the pipelined scalar core against the reference core
+# Expand scalar differential verification to full supported load/store and trap coverage
 
 ## Status
 
-Approved verification-infrastructure milestone. `rtl/core/rv32_core.sv` remains the production/reference implementation; `rtl/core/rv32_core_pipe.sv` remains isolated and experimental.
+Approved bounded verification milestone. `rtl/core/rv32_core.sv` remains the production/reference core and `rtl/core/rv32_core_pipe.sv` remains experimental. The executor must begin from a clean, attributable tree; otherwise stop for human review.
 
 ## Objective and motivation
 
-Create a deterministic differential-verification flow that runs equivalent supported RV32I programs on both scalar cores and detects architectural divergence while ignoring expected cycle, request-timing, and pipeline-state differences. Directed tests cover known scenarios but do not establish broad behavioral equivalence. This work improves confidence before any human decision on production integration or vector-extension attachment. It is not formal equivalence and passing it does not promote the pipeline to production.
+Extend deterministic differential verification so both scalar cores are compared across all currently supported load/store widths and supported terminal behavior. The current campaign covers LW/SW, scalar ALU/control flow, ECALL, and deterministic memory timing modes, but not the full subword-memory or trap surface. This strengthens the scalar foundation before any production-pipeline promotion or vector-interface work. It is not formal equivalence and does not make the pipeline production-ready.
 
 ## Current baseline
 
-The checkpoint is `ce7b3e3`. The production core has a self-checking directed regression (`make test-scalar-directed`). The development core has focused ALU, forwarding, control-flow, redirect, and memory targets. Both use the shared decoder, ALU, immediate generator, register file, and external valid/ready memory protocol. The Python `RV32IReference` is a limited helper, not a full differential framework.
-
-The production retirement interface reports register writes, memory writes, and terminal events. The development core reports PC/instruction/register/terminal retirement fields, but currently ties its `retire_mem_*` outputs low. The differential harness must therefore observe accepted data-memory writes and final memory images independently of development retirement memory fields. Final register state may use bounded verification-only hierarchical observation; no production external interface redesign is authorized.
+Existing differential commands are `test-scalar-diff-smoke`, `test-scalar-diff-random` (32 immediate-mode seeds), `test-scalar-diff-stall` (seed 17 modes 1–3), `test-scalar-diff-seed`, `test-scalar-diff-negative`, and `test-scalar-diff-redirect-backpressure`. The active campaign covers LUI/AUIPC, listed scalar ALU operations, all branches, JAL/JALR, LW/SW, and ECALL. It compares normalized retirement/register/store/final-memory/terminal effects, not cycles. The redirect/backpressure phantom-outstanding-fetch bug is covered by the focused seed-17 target.
 
 ## In scope
 
-- Shared directed/generated program representation and deterministic recorded seeds.
-- Derivation and documentation of the exact common legal subset from RTL, rather than assumption.
-- Equivalent register/data-memory initialization and deterministic termination.
-- Separate runs of the two cores using the same program, initial memory, and reproducible memory-stall schedule.
-- Normalized architectural traces: retired PC/instruction, register write, accepted memory write, terminal event, final registers, final memory, trap PC/cause, and semantically comparable retirement count.
-- Directed differential smoke cases, bounded randomized differential regression, deterministic request backpressure, delayed load responses, bounded timeouts/deadlock diagnosis, actionable mismatch reports, and preserved confirmed failing seeds.
-- A controlled negative checker test proving mismatch detection.
-- Focused test-only trace/observation infrastructure if necessary; canonical fast smoke, bounded campaign, and single-seed reproduce commands/targets are to be added using existing Makefile conventions.
-- Factual updates to implementation/verification documentation and milestone history.
+- Differential coverage for LB, LBU, LH, LHU, LW, SB, SH, and SW.
+- Little-endian byte lanes, byte enables, sign/zero extension, partial-store preservation, loads to x0, and store-without-register-write checks.
+- Load-use ALU, branch/address, mixed-width, store-to-load, backpressured, delayed-response, and mixed-mode cases.
+- Directed aligned/misaligned halfword and word access, illegal instruction, ECALL, and EBREAK categories where behavior is common and directly validated.
+- Trap occurrence, cause, PC, and no-side-effect comparison.
+- Deterministic subword random generation, saved/reproducible seeds, improved mismatch diagnostics, an extended bounded campaign justified by measured runtime, and memory-focused controlled negative detection if practical.
+- Documentation, verification-plan, and milestone-history updates.
 
 ## Out of scope
 
-- Production integration, replacement, or deletion of `rv32_core.sv`.
-- Broad RTL redesign, new ISA behavior, vector/sparse/scratchpad/cache work, branch prediction, multiple outstanding memory operations, compiler/runtime work, FPGA/ASIC work, or performance benchmarking.
-- Cycle-by-cycle equivalence, matching raw stalls/counters/request timing, formal-equivalence claims, or changing architectural behavior merely to make the cores agree.
+- Production integration/replacement; vector, sparse, scratchpad, cache, DMA, branch prediction, multiple outstanding memory operations, compiler/runtime, FPGA/ASIC, performance benchmarking, formal-equivalence claims, broad pipeline redesign, or unrelated new ISA behavior.
 
-## Architectural constraints and protected files
+## Actual supported behavior to validate
 
-Treat both core RTL files as protected while building verification infrastructure. A core change is permitted only after a reproducible divergence, documentation identifies which behavior is wrong, a focused regression is added, and the correction is small and architecture-consistent. All existing checks must then pass.
+The shared decoder supports LB/LH/LW/LBU/LHU and SB/SH/SW. Byte accesses are unaligned-permitted; halfwords require address bit 0 clear; words require bits [1:0] clear. Data is little-endian and stores use lane strobes. Signed loads sign-extend; unsigned loads zero-extend. x0 writes are discarded. The production trap contract specifies causes: instruction misalignment 0, illegal 2, EBREAK 3, load misalignment 4, store misalignment 6, ECALL 11. The executor must directly establish matching pipeline behavior before treating any trap category as common.
 
-Stop for human review before external-interface changes, ambiguous architecture, changing both cores for one mismatch, pipeline-control redesign, trap-policy/memory-semantics changes, or any destructive rewrite.
+## Architectural constraints
 
-## Common instruction subset
+External memory interfaces remain unchanged. Partial stores preserve untouched bytes; faulting or illegal operations must not create register/memory side effects. Cycle timing/counters need not match. Do not weaken tests to force agreement. The reference core must not change unless a reproducible reference-core bug is found and human review approves action.
 
-The implementation must derive the final subset from the decoder/core behavior. The initial normal-program candidate is: LUI, AUIPC; legal OP-IMM and OP ALU/comparison/shift encodings; BEQ/BNE/BLT/BGE/BLTU/BGEU; JAL/JALR; LB/LH/LW/LBU/LHU; SB/SH/SW; and ECALL termination, subject to direct validation in both cores.
+## Generation and directed coverage
 
-Exclude FENCE from normal generation until development behavior is confirmed common. Exclude EBREAK, custom opcodes, illegal encodings, and misaligned accesses from normal random programs. Cover illegal and instruction-misalignment behavior as separate directed categories. Cover load/store misalignment only after the harness establishes matching documented causes; production documentation specifies causes 4/6, while the development implementation requires direct confirmation. Exclude compressed, CSR/privileged, floating-point, atomics, vector, and undefined project behavior.
-
-## Program generation
-
-Programs must be deterministic from a reported seed, bounded in length, constrained to the test-memory map, and terminate through a controlled ECALL or bounded control-flow structure. They must not self-modify, access unavailable memory, or branch outside generated code. Control flow must be constrained to remain in-program. Campaign size must be chosen from measured local runtime and reported exactly; begin with a modest tens-to-hundreds seed campaign, not an arbitrary large count.
-
-## Comparison and memory strategy
-
-Compare normalized architectural effects, not cycles: ordered retirement/terminal sequence where reliable, register writes, accepted store side effects, final x1–x31 plus x0, final data-memory image, trap occurrence/cause/PC, and termination. Treat differing cycle counts, requests, stalls, fetch generations, and debug counters as expected microarchitectural differences.
-
-Use a common deterministic memory model and schedule modes: immediate acceptance/response, request backpressure, delayed load response, and mixed fixed stall patterns. If cores run separately, derive each schedule solely from seed/program-defined state so it reproduces identically. Mismatch output must include seed, saved program, schedule, category, first divergent event, recent normalized context for both runs, expected/observed values, relevant final state, and exact rerun command.
+Normal random programs must be seed-reproducible, aligned, bounded, terminating, inside valid test memory, non-self-modifying, and contain patterns for byte lanes and sign bits. Keep illegal/misaligned/ECALL/EBREAK as separate directed categories. Add directed cases for every load/store width, all byte offsets, both valid halfword offsets, neighbouring-byte/halfword preservation, x0 load destination, dependent ALU and branch/address consumers, consecutive mixed-width memory work, store-followed-by-load, all memory timing modes, trap cause/PC, and no fault side effects.
 
 ## Required verification
 
-The implementation milestone must add and document real canonical commands for a fast differential smoke, a bounded randomized campaign, and a single-seed rerun. It must run:
-
-1. `make test-scalar-directed`.
-2. `make test-scalar-pipe-dev`, `make test-scalar-pipe-alu`, `make test-scalar-pipe-forward`, `make test-scalar-pipe-control`, `make test-scalar-pipe-redirect`, and `make test-scalar-pipe-memory`.
-3. `make lint`, `make check`, and `git diff --check`.
-4. New directed differential smoke tests, bounded random campaign, memory-stall/delayed-response campaign, and one exact seed rerun.
-5. A controlled negative checker perturbation demonstrating detection.
+Retain all current scalar, pipeline, and differential commands. Add real canonical targets for subword differential smoke, trap differential smoke, and extended random campaign; document their names when added. Run those plus exact seed rerun, immediate/delayed/backpressured/mixed modes, controlled negative test, `make lint`, `make check`, and `git diff --check`.
 
 ## Measurable acceptance criteria
 
-Completion requires a documented flow that runs equivalent programs on both cores, normalized architecture-level comparison, deterministic seed rerun, directed smoke pass, bounded reported random seed count pass, memory schedule variation, actionable diagnostics, and a passing controlled negative test. All existing regressions, lint, and repository checks must pass. Confirmed RTL bugs require a focused regression, grounded root cause, minimal fix, and full evidence. Update `docs/implementation_status.md`, `docs/verification_plan.md`, relevant verification documents, and append a factual milestone-history entry. Do not commit or push.
+Completion requires every supported load/store width, extension rule, byte-enable and preservation rule, x0 load, load-use case, common trap cause/PC/no-side-effect case, and all memory modes to pass differential comparison. The extended deterministic campaign must report seed count/runtime; exact reproduction and negative detection must work; existing regressions must pass; no external interface changes or production-readiness claim may be made. Update implementation status, verification plan, verification documentation, and factual milestone history. Do not commit or push.
 
 ## Stop conditions
 
-Stop for human review if the common subset cannot be determined, semantics/traps/memory behavior materially differ, reliable state needs invasive interface changes, a mismatch may be in the reference core, both cores need architectural changes, a broad redesign is required, tests/docs disagree, a harness flaw prevents trustworthy comparison, the tree is not attributable, or required tools cannot run.
+Stop for human review if trap/misalignment/byte-enable/fault-side-effect semantics conflict, a likely reference-core bug appears, an external interface or broad pipeline redesign is needed, unsupported instructions would need to be added, state is not observable without invasive changes, the tree is dirty and attribution is unclear, or required tools fail.
 
 ## Required final report
 
-Report the differential architecture, actual common subset, generation/normalization/memory strategy, commands/results, seeds/campaign size/runtime, negative-test result, mismatches and confirmed fixes, changed files, final diff review, blind spots, reasons the pipeline remains experimental, human-review items, and confirmation of no commit/push.
+Report the actual common memory/trap subset, generator and directed cases, comparison/memory constraints, byte-enable and trap checks, seed count/runtime/modes, exact results, negative evidence, bugs/fixes, changed files, diff review, blind spots, continuing experimental limitations, human-review items, and no-commit/no-push confirmation.
