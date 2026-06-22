@@ -49,8 +49,19 @@ make test-scalar-diff-subword-random
 make test-scalar-pipe-store-retire
 make test-scalar-diff-store-retire
 make test-scalar-pipe-vec-stub-all
+make test-full-regression
 ```
 
 `check-scalar-throughput-experiment` (legacy alias `test-scalar-pipeline`) is a non-blocking historical Phase 1.7 experiment. It instantiates the production/reference core and intentionally fails its sustained-throughput target; it is not a required correctness regression.
+
+## Milestone workflow
+
+Define a concise milestone externally, place it in
+`docs/current_milestone.md`, and commit that definition. Run
+`./scripts/run_milestone.sh` from the repository root for one primary Codex
+implementation session. Review `.codex/milestone_result.md` and the Git diff;
+ask for a focused repair only when there is a concrete finding. A separate
+read-only Codex completion audit is not the normal path. Human review and a
+manual commit remain required.
 
 The planning source manifest is [docs/source_manifest.md](docs/source_manifest.md). Architectural choices that still require approval are tracked in [docs/architecture/open_questions.md](docs/architecture/open_questions.md) and `docs/decisions/`.

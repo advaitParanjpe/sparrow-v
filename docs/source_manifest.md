@@ -28,6 +28,7 @@ The original planning documents remain unmodified in `sparrow-v-project-plan/` a
 
 - [Repository architecture](architecture.md)
 - [Current milestone template](current_milestone.md)
+- [Codex context map](codex_context.md)
 - [Implementation status](implementation_status.md)
 - [Verification plan](verification_plan.md)
 - [Milestone history](milestone_history.md)

@@ -1,24 +1,66 @@
 # Sparrow-V agent operating rules
 
-Sparrow-V milestones are defined by a human and architecture/review assistant. This repository file bounds implementation agents; it does not authorize a new architecture or feature by itself.
+Milestones are human-defined and stored in `docs/current_milestone.md`. This
+file is permanent operating policy; it does not authorize architecture or
+feature work outside the active milestone.
 
-## Before changing code
+## Safety
 
-1. Read this file and any nested `AGENTS.md` files.
-2. Read `docs/architecture.md`, `docs/current_milestone.md`, `docs/implementation_status.md`, and `docs/verification_plan.md`.
-3. Audit the relevant RTL, tests, interfaces, and current working tree. Treat repository contents and directly run commands as the source of truth.
-4. Keep the change inside the approved milestone. Preserve working behavior unless the milestone explicitly changes it.
+- Inspect the working tree, relevant implementation, tests, and interfaces
+  before editing. Read nested `AGENTS.md` files when present.
+- Preserve unrelated user changes and working behavior outside milestone scope.
+- Do not weaken, bypass, or delete tests/assertions to obtain a pass. Do not
+  fabricate results or claim checks that did not run.
+- Do not commit, push, rewrite history, force-reset, discard user work, or use
+  destructive Git operations.
+- Stop for human review on genuine architectural ambiguity: material interface
+  or ISA/pipeline decisions, meaningful alternatives, conflicting requirements,
+  destructive redesign, suspect existing tests, unavailable required tools, or
+  substantial scope expansion. Small local choices within approved architecture
+  are permitted.
 
-Prefer small understandable changes. Do not weaken, bypass, or delete tests/assertions to obtain a pass. Do not alter unrelated dirty files. Do not commit, push, rewrite history, force-reset, or discard user work.
+## Lean implementation workflow
 
-## Required milestone workflow
+1. Read `docs/codex_context.md` and `docs/current_milestone.md`.
+2. Read only architecture files or ADRs explicitly named by the milestone or
+   clearly required by the affected subsystem.
+3. Inspect relevant implementation, tests, interfaces, and working tree.
+4. Implement incrementally and use focused development checks.
+5. Do not rerun complete repository regression after every edit.
+6. Run the milestone-required full regression once after implementation is
+   stable. If a late correction is bounded, rerun affected focused tests and
+   only the necessary aggregate regression.
+7. Review the final diff, update only materially affected documentation, and
+   write `.codex/milestone_result.md`.
+8. Stop only at completion or a documented human-review condition.
 
-Audit → concrete plan → incremental implementation → targeted checks → complete milestone regression → full diff review → repair concrete issues → update `docs/implementation_status.md` → grounded final report.
+A partial implementation without a genuine documented stop condition is not a
+valid completion point. Continue implementing, testing, and repairing until
+acceptance criteria are met or a real stop condition is reached.
 
-The final report must list work completed, files changed, architecture/implementation decisions, exact commands and pass/fail results, measured results only, limitations, risks, human-review items, and confirmation that no commit or push occurred.
+## Testing policy
 
-## Stop for human review
+### Development checks
 
-Stop rather than deciding independently when requirements materially conflict, a major interface or pipeline/ISA decision is needed, several options have meaningful trade-offs, a destructive rewrite appears necessary, existing tests seem incorrect, documented architecture conflicts with the request, necessary tools are unavailable, measurements undermine a core assumption, or scope must expand substantially.
+Use the smallest relevant focused test, relevant lint/syntax check, and a
+repository check when useful.
 
-Small local choices inside an approved architecture are permitted. Major direction remains human-owned.
+### Final acceptance
+
+Run milestone-required aggregate tests and the full regression once after
+stability. Run `git diff --check`; run documentation checks when documentation
+changes. Record exact commands and outcomes in the result file.
+
+## Documentation and reporting
+
+Update only files directly affected by the milestone. Normally this includes
+`docs/implementation_status.md`, `docs/milestone_history.md`, and one relevant
+architecture or verification document when behavior or interfaces changed.
+Update README only for public usage changes and ADRs only for architectural
+decisions.
+
+Keep the final response short; do not restate the milestone. The authoritative
+compact handoff is `.codex/milestone_result.md`, overwritten for each
+milestone. It must honestly record status, changed files, focused/final checks,
+meaningful measurements, bugs, stop condition, diff findings, reference-core
+status, and commit/push status.

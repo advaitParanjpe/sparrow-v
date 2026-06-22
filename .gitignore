@@ -37,3 +37,6 @@ fpga/**/*.runs/
 # IDE settings
 .idea/
 .vscode/
+
+# Local Codex workflow output
+.codex/

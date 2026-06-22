@@ -2,6 +2,20 @@
 
 Append completed, human-reviewed milestones below. Pending-review implementation evidence must be explicitly marked and must not imply a commit. Do not reconstruct or invent prior entries.
 
+### Lean Codex milestone workflow — implementation complete, pending human review — 2026-06-22
+
+- Reference: uncommitted workflow-infrastructure change; no commit or human acceptance yet.
+- Summary: permanent Codex rules now live in `AGENTS.md` and a concise context
+  map; the active milestone is a lean template; one launcher session writes an
+  ignored compact result file; scalar/vector/full regression aggregates provide
+  one final-acceptance path.
+- Key files: `AGENTS.md`, `docs/codex_context.md`, `docs/current_milestone.md`,
+  `scripts/run_milestone.sh`, `Makefile`, and workflow documentation.
+- Tests run: shell syntax, Make help and full-regression dry run, repository
+  checks, documentation checks, and `git diff --check` passed.
+- Follow-up work: human review, then manually commit the workflow change before
+  defining the next milestone.
+
 ### Implement and verify the minimal scalar-to-vector command/completion adapter with a stub vector engine — implementation complete, pending human review — 2026-06-22
 
 - Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.

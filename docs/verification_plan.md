@@ -19,6 +19,11 @@
   retirement behavior, result/no-writeback semantics, precise exception,
   reset cancellation, redirect suppression, and payload stability through
   command and completion backpressure.
+- Aggregate commands: `make test-scalar-regression` runs the directed,
+  focused-pipeline, and differential scalar correctness suite; `make
+  test-vector-regression` runs the vector-stub aggregate; and `make
+  test-full-regression` combines both with Python tests, lint, repository, and
+  documentation checks. The expected-failing throughput experiment is excluded.
 
 ## Completion rule
 
@@ -38,4 +43,8 @@ Human review approved the resulting architecture decisions: `rv32_core` remains 
 
 ## Milestone regression guidance
 
-Use targeted checks while editing, then run the complete milestone regression, inspect the full diff, repair concrete defects, update implementation status, and report exact command output. Do not claim unavailable planned checks have run.
+Use targeted checks while editing, then run the required aggregate regression
+once after the implementation is stable. Inspect the full diff, repair concrete
+defects, update only materially affected documentation, and write the compact
+local result file described in `AGENTS.md`. Do not claim unavailable planned
+checks have run.

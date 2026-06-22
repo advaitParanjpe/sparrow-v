@@ -22,6 +22,8 @@ REQUIRED_DIRECTORIES = (
 
 REQUIRED_FILES = (
     "README.md", "STATUS.md", "CONTRIBUTING.md", ".gitignore", "Makefile",
+    "AGENTS.md", "docs/codex_context.md", "docs/current_milestone.md",
+    "docs/codex_milestone_prompt.md",
     "docs/source_manifest.md", "docs/architecture/open_questions.md",
     "docs/architecture/phase_dependencies.md",
     "docs/build_reports/phase_0_repository_setup.md",
