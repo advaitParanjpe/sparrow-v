@@ -1,126 +1,211 @@
-# Add full subword load/store differential coverage for the scalar pipeline
+# Pipeline production-readiness review and scalar-to-vector interface definition
 
 ## Status
 
-Approved bounded verification milestone. `rtl/core/rv32_core.sv` remains the protected production/reference core and must not change. `rtl/core/rv32_core_pipe.sv` remains experimental and is compared only through the existing deterministic differential framework; this milestone does not promote or integrate it.
+Approved architecture, audit, specification, and decision milestone. This milestone does not implement vector RTL, alter scalar RTL, rename modules, delete files, change build behavior, or promote a core before the evidence and human-review conditions below are met. `rtl/core/rv32_core.sv` remains the protected production/reference scalar core at milestone entry; `rtl/core/rv32_core_pipe.sv` remains experimental at milestone entry.
 
-## Objective and motivation
+## Objective
 
-Extend deterministic scalar differential verification so `rv32_core` and `rv32_core_pipe` are compared across every currently supported scalar memory width and memory-data formatting behavior. The current differential campaign covers scalar ALU/control flow, LUI/AUIPC, LW/SW, ECALL, deterministic seeds, immediate/delayed/backpressured/mixed memory modes, final register and memory comparison, and controlled register-focused negative testing. Focused pipeline trap regressions also establish matching causes for instruction/control-target misalignment (0), load misalignment (4), and store misalignment (6).
+Determine whether `rv32_core_pipe` is sufficiently correct, interface-stable, verified, maintainable, and integration-ready to become Sparrow-V's primary scalar CPU, while retaining `rv32_core` as a reference model when appropriate. Separately define a stable scalar interface freeze and a minimal custom scalar-to-vector command/completion boundary for a later vector-engine milestone.
 
-The work strengthens the scalar-memory verification base before any production-pipeline promotion. It is not formal equivalence and does not change the pipeline's experimental status.
+This is not a throughput-promotion milestone. Passing architectural differential tests establishes only correctness within their exercised domain; it does not establish sustained-throughput, timing, area, formal-equivalence, or production-integration readiness.
+
+## Entry baseline and constraints
+
+The entry baseline includes the protected/reference scalar core, isolated pipelined scalar core, directed ALU/forwarding/control/redirect/memory/trap tests, deterministic normalized differential comparison, all supported load/store widths, immediate/delayed/backpressured/mixed memory modes, exact-seed reproduction, a 128-seed immediate subword campaign, controlled register and memory negative tests, matching misalignment causes, and fixes for redirect/backpressure and terminal retirement. No formal-equivalence proof exists. `check-scalar-throughput-experiment` is an expected-failing historical experiment and must remain non-blocking.
+
+The milestone must preserve existing architectural behavior unless a concrete, reproducible defect or an accepted ADR justifies a change. It must not weaken assertions, bypass tests, classify an expected failure as a pass, or convert verification-only behavior into an external contract accidentally.
 
 ## In scope
 
-- Differential directed and deterministic randomized coverage for LB, LBU, LH, LHU, LW, SB, SH, and SW.
-- Signed and unsigned subword extension, byte-lane selection, store byte enables, and preservation of untouched bytes after partial stores.
-- Loads to x0, stores without a destination-register write, load-use dependencies, mixed-width sequences, and store-to-load memory semantics.
-- Valid byte offsets 0/1/2/3 and valid halfword offsets 0/2, sign-bit-set data patterns, and valid in-range aligned random accesses.
-- Immediate-memory, request-backpressure, delayed-response, and mixed stall/delay modes.
-- Deterministic seed reproduction, actionable mismatch diagnostics, a measured larger bounded random campaign, and memory-focused controlled negative detection.
-- Factual documentation, verification-plan, scalar-verification, and milestone-history updates made when the implementation is complete.
+- Repository, RTL, interface, test, build-script, documentation, and Git-history audit.
+- A structured production-readiness comparison and evidence-based promotion decision for both scalar implementations.
+- A measured, bounded, deterministic scalar confidence campaign before that decision.
+- Scalar architectural/interface freeze specification and classification of stable, verification-only, and intentionally unstable signals.
+- A minimal custom vector command/completion protocol, vector-state boundary, memory-boundary recommendation, ordering/retirement/exception semantics, and integration roadmap.
+- ADRs and factual documentation updates required to record the decisions.
 
 ## Out of scope
 
-- New trap architecture or new trap-development work; existing trap regressions must remain passing.
-- Production integration/replacement of `rv32_core_pipe`, or any change to `rtl/core/rv32_core.sv` without a reproducible reference-core bug and human approval.
-- Vector ISA/datapath, sparse execution, scratchpad/cache/DMA, branch prediction, multiple outstanding memory requests, compiler/runtime, FPGA/ASIC, formal-equivalence claims, broad pipeline redesign, or new scalar instructions.
+- Vector RTL, vector register-file RTL, vector ALU/MAC, scratchpad RTL, vector ISA implementation, sparse metadata decoding, compiler/assembler changes, cache, branch prediction, throughput redesign, production file/module renaming, file deletion, FPGA/ASIC implementation, and formal equivalence.
+- A claim that simulation establishes synthesis timing, area, power, or formal proof.
 
-## Architectural constraints
+## Phase 1 — repository and architecture audit
 
-- Existing memory interfaces and little-endian behavior remain unchanged.
-- Byte enables must match access size and address offset. SB and SH preserve all untouched bytes.
-- Signed loads sign-extend; unsigned loads zero-extend; LW returns the correct word.
-- Loads to x0 do not alter architectural state. Stores do not write a destination register.
-- Request/response handling remains correct under stalls and delays, with no duplicate memory request, writeback, or store side effect.
-- Cycle counts need not match between cores; normalized architectural effects do.
-- Normal generated programs use aligned accesses. Misalignment remains covered by the existing focused trap regression, not by new random generation.
+Before assessing or changing any architecture document, read `AGENTS.md`, `README.md`, `docs/architecture.md`, `docs/implementation_status.md`, `docs/verification_plan.md`, `docs/milestone_history.md`, `docs/verification/scalar_phase_1.md`, this document, all ADRs, both scalar cores, the decoder/package/register-file/ALU/immediate sources, all scalar and differential testbenches, `Makefile`, and applicable scripts. Read nested `AGENTS.md` files if present.
 
-## Directed differential coverage
+Inspect recent Git history and record `git status --short`; the promotion decision is invalid if the baseline is not clean or if evidence cannot be attributed to a documented tree state. Record the exact commit identifier, tool versions, test commands, exit status, wall time, and any expected/non-blocking failure distinctly.
 
-Add focused differential cases that check architectural retirement/register/store/final-memory effects for:
+Rerun and record the current scalar/differential baseline before any promotion conclusion:
 
-- LB with positive data and with byte bit 7 set; LBU with byte bit 7 set.
-- LH with positive data and with halfword bit 15 set; LHU with halfword bit 15 set; LW.
-- SB at offsets 0, 1, 2, and 3; SH at offsets 0 and 2; SW.
-- Surrounding-byte preservation after SB and SH.
-- A load to x0.
-- A dependent ALU instruction after each load width, plus a dependent branch or address calculation after representative loads.
-- Consecutive mixed-width loads and stores, and store followed by load from the same address.
-- Subword access under request backpressure, subword load under delayed response, and subword access under mixed stall/delay behavior.
+```sh
+make test-scalar-directed
+make test-scalar-pipe-dev
+make test-scalar-pipe-alu
+make test-scalar-pipe-forward
+make test-scalar-pipe-control
+make test-scalar-pipe-redirect
+make test-scalar-pipe-memory
+make test-scalar-pipe-trap
+make test-scalar-diff-smoke
+make test-scalar-diff-random
+make test-scalar-diff-stall
+make test-scalar-diff-negative
+make test-scalar-diff-redirect-backpressure
+make test-scalar-diff-subword-directed
+make test-scalar-diff-subword-random
+make test-scalar-diff-subword-stall
+make test-scalar-diff-subword-negative
+make lint
+make check
+```
 
-Directed checks must show byte-lane, extension, destination-write, byte-enable, and final-memory effects rather than merely terminal completion.
+Do not run `make test-scalar-random` as a required pass: it is documented as blocked. Run `make check-scalar-throughput-experiment` only to record its expected failure and limitations; it cannot block correctness readiness or support a performance claim.
 
-## Random generation and campaign
+## Phase 2 — production-readiness assessment
 
-Extend the active differential generator with aligned subword loads/stores while retaining deterministic execution from a recorded seed. Generated programs must:
+Create a comparison table for `rv32_core` and `rv32_core_pipe` that cites concrete source/test evidence for each item below, identifies intentional differences, and distinguishes unverified assumptions from demonstrated behavior:
 
-- use valid in-range data-memory addresses, avoid self-modifying code, remain bounded, and guarantee termination;
-- exercise all four byte lanes and both valid halfword offsets;
-- generate values with byte bit 7 and halfword bit 15 set;
-- include all supported load/store widths and report the actual generated instruction mix;
-- preserve failing seeds as reproducible regressions.
+- supported instruction subset and decode/illegal-instruction handling;
+- trap causes, trap state, fault PC, side-effect suppression, and terminal behavior;
+- instruction/data memory request-response semantics, alignment, byte strobes, response timing, and outstanding-transaction limits;
+- fetch, redirect, stale-response, request-backpressure, and response-backpressure handling;
+- forwarding/interlocks, retirement event/trace semantics, counters, reset behavior, and externally visible ports;
+- observability/debug signals, testbench coupling, code quality/maintainability, lint results, and synthesis suitability;
+- verification depth, negative-test evidence, known blind spots, and expected performance limits.
 
-Measure runtime before selecting the campaign size. Run more than the existing 32 immediate-mode seeds; 100–250 seeds is acceptable only when the measured runtime is practical. Report exact seed count, runtime, modes, and an exact reproduction command.
+Rate each core separately in five non-interchangeable categories: (1) correctness readiness, (2) interface stability, (3) verification maturity, (4) performance readiness, and (5) production naming/integration readiness. A passing differential campaign may support (1) only for the tested subset/modes; it cannot by itself raise the ratings for (3)–(5).
 
-## Controlled negative testing
+Explicitly identify whether `retire_mem_*` behavior, performance counters, and terminal trap behavior are architectural, integration, or verification-only contracts. Assess whether either core relies on simulation-only constructs or interfaces that make it unsuitable for synthesis integration. Do not infer that matching output-port names means matching semantics.
 
-Retain the existing register-focused controlled negative test. Add a memory-focused controlled negative case that intentionally corrupts exactly one load-extension result, store byte enable, or final memory byte. The checker must detect the intended mismatch without relying on timeout.
+## Phase 3 — broader deterministic confidence campaign
 
-## Canonical targets to add
+Before any promotion decision, measure the runtime of a representative immediate-mode differential batch and choose a practical deterministic campaign size. Target 500–1000 immediate-mode seeds only if measured wall time and available tooling make it practical; otherwise select and justify the largest lower bounded count that preserves a useful review cadence. Document seed range, generator/instruction mix, tool versions, timeout policy, total wall time, and exact rerun commands.
 
-Use repository naming conventions and add real Make targets for:
+The final campaign must include:
 
-| Purpose | Target to add |
+- all directed scalar and focused pipeline regressions listed in Phase 1;
+- all current differential directed, random, redirect/backpressure, trap, and controlled-negative regressions;
+- the measured large immediate-mode differential campaign;
+- a representative, explicitly stated smaller seed set in each request-backpressured, delayed-response, and mixed mode;
+- exact-seed reruns selected from each mode, including any failure reproduction if encountered;
+- lint, repository checks, documentation checks, `git diff --check`, and a final working-tree audit.
+
+The implementation may add a documented campaign target only if needed to make this reproducible. It must not call the campaign complete merely because an old 128-seed target passed, and it must not require formal equivalence.
+
+## Phase 4 — promotion decision framework
+
+Produce exactly one evidence-based conclusion:
+
+| Conclusion | Meaning |
 | --- | --- |
-| Focused subword directed differential smoke | `test-scalar-diff-subword-directed` |
-| Extended deterministic random campaign | `test-scalar-diff-subword-random` |
-| Request-backpressure, delayed-response, and mixed modes | `test-scalar-diff-subword-stall` |
-| Exact seed/mode reproduction | `test-scalar-diff-subword-seed SEED=<n> MODE=<n>` |
-| Memory-focused controlled negative test | `test-scalar-diff-subword-negative` |
+| **A. Promote** | `rv32_core_pipe` becomes the primary Sparrow-V scalar CPU. |
+| **B. Conditionally promote** | It becomes the primary development core, with specific documented limitations and gates. |
+| **C. Do not promote** | It remains experimental because a concrete correctness, interface, verification, or maintainability blocker remains. |
 
-The implementation may reuse the existing differential harness and mode encoding, but these targets must be canonical, documented, and self-checking.
+The conclusion must reference the Phase 2 ratings, campaign results, unresolved differences, and known blind spots. If A or B is selected, specify whether renaming is deferred (default) or requires a later approved milestone; whether `rv32_core.sv` remains the reference model; how tests label/reference the primary versus reference core; interfaces frozen by this milestone; behaviors still experimental; and exact documentation claims permitted. Do not perform promotion, renaming, or deletion in this milestone.
 
-## Required verification
+If C is selected, name each concrete blocker, required evidence/fix, and the bounded follow-up milestone. A vague preference for one implementation is not evidence.
 
-Run and report:
+## Phase 5 — scalar interface freeze
 
-- all current production scalar tests;
-- all current focused pipeline tests, including `make test-scalar-pipe-trap`;
-- all current differential tests;
-- the new directed subword differential test, extended randomized campaign, exact-seed rerun, and every memory timing mode;
-- existing register-focused and new memory-focused controlled negative tests;
-- `make lint`, `make check`, and `git diff --check`.
+Publish a scalar-interface specification that lists signal names, direction, width, reset/validity behavior, handshake obligations, transaction/ordering limits, and intended consumers. At minimum classify the following:
+
+| Classification | Required treatment |
+| --- | --- |
+| Stable architectural/integration interfaces | `clk`, synchronous active-low `rst_n`, parameters affecting reset vectors, instruction-memory request/response, data-memory request/response, trap outputs, retirement outputs, and integration-level top ports. Freeze their semantics before vector integration. |
+| Stable observability interfaces | `cycle_count`, `instret_count`, and any trace/debug output retained for system integration. State whether each is architectural or debug-only and give it a versioned semantic contract if it is retained. |
+| Verification-only interfaces | Differential trace fields, testbench hierarchy access, controlled-negative hooks, and any internal counters used only by tests. Do not expose these to the vector engine or make them a software ABI. |
+| Intentionally unstable/deferred interfaces | Microarchitectural stall/flush counters, pipeline-stage internals, performance counters not explicitly frozen, core naming, and future vector-specific ports until their specification/ADR is accepted. |
+
+The specification must state that the vector engine must not observe scalar register-file internals, fetch state, pipeline stage valid bits, redirect epochs, internal hazards, or raw memory-port timing. It must consume only the defined extension boundary and, where selected, its own memory boundary.
+
+## Phase 6 — scalar-to-vector interface definition
+
+Create `docs/architecture/scalar_vector_interface.md` (or an equivalently named dedicated specification) and define the protocol independently of vector datapath RTL. It must be cycle-precise enough for a future RTL/testbench implementation, while leaving detailed vector operation semantics to a later ISA milestone.
+
+### Command issue
+
+Specify a decoupled `valid/ready` command channel with command acceptance defined as `cmd_valid && cmd_ready`. Define the exact fields and widths or an explicitly versioned packed command record for:
+
+- decoded operation identifier/class and reserved/illegal encoding behavior;
+- source scalar operands and valid bits;
+- scalar destination-register metadata and writeback-enable intent;
+- immediate/function fields and vector register indices where relevant;
+- instruction PC and an instruction identity/tag policy;
+- privilege/trap context, or an explicit Phase-1 statement that it is absent;
+- reset behavior and whether command acceptance can be backpressured.
+
+Reserve custom-0 only consistently with ADR-003. Do not freeze a full vector ISA, lane semantics, sparse encoding, or software ABI here.
+
+### Completion
+
+Specify a completion channel with `valid/ready` handshake (or justify an equivalent protocol). Define completion acceptance, result-valid semantics, scalar destination/result data, exception/trap indication and cause ownership, completion status, identity/tag, cancellation/reset behavior, and ordering guarantees. A completion with no scalar result must be representable without an invented scalar writeback.
+
+### Initial ordering, stall, retirement, and exception policy
+
+Adopt or explicitly reject the following minimum initial policy; any rejection requires a comparison and an accepted ADR:
+
+- one vector command outstanding;
+- in-order scalar issue and in-order vector completion;
+- scalar pipeline stalls after command acceptance until completion is accepted;
+- no speculative vector issue;
+- vector instruction retires exactly at accepted successful completion, not at command issue;
+- vector exceptions are precise: no destination writeback/retirement occurs, scalar trap state identifies the issuing instruction, and younger scalar work cannot become architecturally visible;
+- redirects and scalar traps cannot leave an uncancelled architecturally visible vector command; define whether they are impossible under blocking or require reset/cancellation acknowledgement.
+
+Specify command-ready behavior while a command is outstanding, whether a scalar destination is reserved before completion, how x0 is treated, and what happens on reset. Explain why tags are unnecessary for the one-outstanding initial policy, while reserving a future extension path rather than exposing unneeded tag machinery now.
+
+### Memory boundary decision
+
+Compare and recommend one initial vector-memory boundary: dedicated scratchpad, shared scalar data-memory port, explicit vector load/store commands with another owner, or a separate vector memory interface. The recommendation must evaluate implementation complexity, verification difficulty, future banked-scratchpad support, scalar/vector contention, clean software model, ordering/exception behavior, and later ASIC synthesis.
+
+The selected first boundary must state ownership, arbitration/ordering responsibility, address/data/byte-enable semantics where applicable, reset/error behavior, and whether scalar/vector memory can overlap. It must remain a documented architecture choice only; no scratchpad or vector-memory RTL is permitted.
+
+### Register-state and ISA boundaries
+
+Specify that vector registers are owned entirely by the vector engine and remain independent of the scalar register file. Define how vector register indices are encoded/transported, the scalar-operand/result crossing rules, vector reset state, and architectural versus debug observation of vector state. Defer register count/width, mask/tail policy, lane arithmetic, sparse metadata, and detailed instruction semantics to their existing or later ADRs. The extension mechanism may propose operation classes/encoding allocation, but must not claim a full vector ISA.
+
+## Phase 7 — ADRs and documentation
+
+Create or update ADRs with context, alternatives, decision, consequences, and deferred questions for:
+
+- scalar pipeline promotion decision and treatment of `rv32_core` as reference;
+- scalar interface freeze and observability classification;
+- scalar-to-vector command/completion protocol and one-outstanding policy (update ADR-004 or supersede it explicitly);
+- vector register-state ownership (update ADR-005 or supersede it explicitly);
+- initial vector memory boundary and ordering implications (update ADR-007 and ADR-008 or supersede them explicitly).
+
+Update `docs/architecture.md`, `docs/implementation_status.md`, `docs/verification_plan.md`, `docs/milestone_history.md`, the dedicated scalar-to-vector specification, relevant ADR index/status entries, and `README.md` only if user-facing architecture status changes. The documents must distinguish implemented facts from recommendations and deferred work.
 
 ## Acceptance criteria
 
 The milestone is complete only when:
 
-1. Every supported load and store width is differentially verified.
-2. Signed/unsigned extension, byte enables, partial-store preservation, x0 loads, and load-use behavior are checked.
-3. All valid byte and halfword offsets are exercised.
-4. Immediate, delayed, backpressured, and mixed memory modes pass.
-5. The larger deterministic campaign passes, reports actual mix/seed count/runtime, and supports exact seed reproduction.
-6. Both controlled negative tests detect their intended mismatches.
-7. All prior regressions, including focused pipeline traps, remain passing.
-8. No external interface changes occur and `rtl/core/rv32_core.sv` remains unchanged.
-9. Documentation and milestone history are updated with measured results; no commit or push occurs.
+1. The clean entry baseline, Git revision, exact commands, pass/fail results, and measured times are recorded.
+2. The broader deterministic campaign is justified by measured runtime and passes with reproducible seed/mode commands.
+3. A production-readiness assessment compares both cores across every Phase 2 category.
+4. One A/B/C promotion decision is made with traceable evidence, and the role of `rv32_core.sv` is defined.
+5. Stable scalar interfaces, stable observability interfaces, verification-only interfaces, and unstable/deferred interfaces are explicitly listed.
+6. The scalar-to-vector command and completion protocol specifies handshake, fields, backpressure, status, reset, ordering, and identity policy.
+7. One-outstanding, stall, retirement, redirect, cancellation, and precise-exception semantics are decided.
+8. An initial vector memory-boundary recommendation and vector-state ownership model are documented.
+9. Required ADRs and all required documentation are internally consistent.
+10. No vector RTL, scalar promotion/renaming, build-behavior change, commit, or push occurs.
 
 ## Stop conditions
 
-Stop for human review only if reference and pipeline memory semantics materially conflict, byte-enable behavior is ambiguous, a reference-core bug is found, an external interface change is required, a broad pipeline redesign is required, the supported instruction subset is unclear, or required observability needs invasive interface changes. Missing tests, generator work, or harness implementation are not stop conditions.
-
-## Documentation requirements
-
-On completion, factually update `docs/implementation_status.md`, `docs/verification_plan.md`, relevant scalar verification documentation, and `docs/milestone_history.md`; update `README` only if stable user-facing commands are added. Document the supported subset, directed coverage, randomized instruction mix, campaign size/runtime, memory modes, negative-test evidence, bugs/fixes, remaining blind spots, and why the pipeline remains experimental.
+Stop for human review rather than deciding independently if promotion requires significant RTL restructuring; scalar interfaces remain materially unstable; reference and pipeline semantics conflict; a likely correctness bug is found; external interface changes are unavoidable; retirement/exception semantics cannot be specified cleanly; or the vector memory-boundary choice has material unresolved trade-offs. Record the evidence and alternatives; do not substitute an undocumented assumption.
 
 ## Required final report
 
 Report:
 
 1. `MILESTONE COMPLETE` or `MILESTONE NOT COMPLETE`.
-2. Directed subword cases and random-generator changes.
-3. Actual tested instruction subset, seed count, runtime, and memory modes.
-4. Negative-test evidence, bugs/fixes, exact commands/results, and documentation updates.
-5. Complete changed-file list, diff-review findings, and remaining limitations.
-6. Confirmation that the reference core was unchanged and that no commit or push occurred.
+2. The scalar-core promotion decision and its evidence.
+3. Exact commands, pass/fail results, commit/tree state, and measured runtime basis for the confidence campaign.
+4. Stable scalar interfaces and observability contracts, plus verification-only and deferred interfaces.
+5. Scalar-to-vector command/completion protocol; stall, retirement, redirect, reset, and exception semantics.
+6. Memory-boundary recommendation and vector-state ownership.
+7. ADRs and documentation changed, remaining risks/deferred decisions, and the next implementation milestone roadmap.
+8. Confirmation that no vector RTL was implemented and no commit or push occurred.
