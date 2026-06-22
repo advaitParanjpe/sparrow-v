@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+`include "tb/integration/vec_pipe_idle_ports.svh"
 module tb_scalar_pipe_forward;
   logic clk=0,rst_n=0; always #5 clk=~clk;
   logic imem_req_valid,imem_req_ready=1,imem_resp_valid,imem_resp_ready; logic [31:0] imem_req_addr,imem_resp_data;

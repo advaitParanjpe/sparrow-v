@@ -4,7 +4,7 @@ RTL_SOURCES := $(shell find rtl -name '*.sv' | sort)
 SCALAR_TB := tb/integration/tb_scalar_core.sv
 SIM_BUILD := sim/build
 
-.PHONY: check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline check-scalar-throughput-experiment test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-seed test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative clean
+.PHONY: check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline check-scalar-throughput-experiment test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-cpl-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path test-scalar-pipe-vec-stub-all test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-seed test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative clean
 
 .PHONY: test-scalar-pipe-dev
 test-scalar-pipe-dev:
@@ -50,6 +50,37 @@ test-scalar-pipe-store-retire:
 	$(SIM_BUILD)/tb_scalar_pipe_store_retire.vvp
 
 test-scalar-pipe-memory-stall: test-scalar-pipe-memory
+
+VEC_STUB_RTL := rtl/common/sparrowv_scalar_pkg.sv rtl/core/rv32_alu.sv rtl/core/rv32_decoder.sv rtl/core/rv32_immediate.sv rtl/core/rv32_regfile.sv rtl/core/rv32_core_pipe.sv rtl/vector/rv32_vec_stub_engine.sv
+test-scalar-pipe-vec-stub:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_scalar_pipe_vec_stub -Ptb_scalar_pipe_vec_stub.MODE=0 -o $(SIM_BUILD)/tb_scalar_pipe_vec_stub.vvp $(VEC_STUB_RTL) tb/integration/tb_scalar_pipe_vec_stub.sv
+	$(SIM_BUILD)/tb_scalar_pipe_vec_stub.vvp
+test-scalar-pipe-vec-cmd-stall:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_scalar_pipe_vec_stub -Ptb_scalar_pipe_vec_stub.MODE=1 -o $(SIM_BUILD)/tb_scalar_pipe_vec_cmd_stall.vvp $(VEC_STUB_RTL) tb/integration/tb_scalar_pipe_vec_stub.sv
+	$(SIM_BUILD)/tb_scalar_pipe_vec_cmd_stall.vvp
+test-scalar-pipe-vec-cpl-stall:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_scalar_pipe_vec_stub -Ptb_scalar_pipe_vec_stub.MODE=2 -o $(SIM_BUILD)/tb_scalar_pipe_vec_cpl_stall.vvp $(VEC_STUB_RTL) tb/integration/tb_scalar_pipe_vec_stub.sv
+	$(SIM_BUILD)/tb_scalar_pipe_vec_cpl_stall.vvp
+test-scalar-pipe-vec-exception:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_scalar_pipe_vec_stub -Ptb_scalar_pipe_vec_stub.MODE=3 -o $(SIM_BUILD)/tb_scalar_pipe_vec_exception.vvp $(VEC_STUB_RTL) tb/integration/tb_scalar_pipe_vec_stub.sv
+	$(SIM_BUILD)/tb_scalar_pipe_vec_exception.vvp
+test-scalar-pipe-vec-no-writeback:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_scalar_pipe_vec_stub -Ptb_scalar_pipe_vec_stub.MODE=4 -o $(SIM_BUILD)/tb_scalar_pipe_vec_no_writeback.vvp $(VEC_STUB_RTL) tb/integration/tb_scalar_pipe_vec_stub.sv
+	$(SIM_BUILD)/tb_scalar_pipe_vec_no_writeback.vvp
+test-scalar-pipe-vec-reset:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_scalar_pipe_vec_stub -Ptb_scalar_pipe_vec_stub.MODE=5 -o $(SIM_BUILD)/tb_scalar_pipe_vec_reset.vvp $(VEC_STUB_RTL) tb/integration/tb_scalar_pipe_vec_stub.sv
+	$(SIM_BUILD)/tb_scalar_pipe_vec_reset.vvp
+test-scalar-pipe-vec-wrong-path:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_scalar_pipe_vec_stub -Ptb_scalar_pipe_vec_stub.MODE=6 -o $(SIM_BUILD)/tb_scalar_pipe_vec_wrong_path.vvp $(VEC_STUB_RTL) tb/integration/tb_scalar_pipe_vec_stub.sv
+	$(SIM_BUILD)/tb_scalar_pipe_vec_wrong_path.vvp
+test-scalar-pipe-vec-stub-all: test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-cpl-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path
 
 DIFF_TB := tb/integration/tb_scalar_differential.sv
 DIFF_RTL := rtl/common/sparrowv_scalar_pkg.sv rtl/core/rv32_alu.sv rtl/core/rv32_decoder.sv rtl/core/rv32_immediate.sv rtl/core/rv32_regfile.sv rtl/core/rv32_core.sv rtl/core/rv32_core_pipe.sv

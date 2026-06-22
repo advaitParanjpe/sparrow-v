@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — v1 boundary, no RTL.
+Accepted — v1 boundary; experimental protocol-only RTL exercise.
 
 ## Context
 
@@ -15,7 +15,7 @@ The plans permit a blocking first implementation and defer decoupled issue. The 
 
 ## Decision
 
-Adopt the one-outstanding blocking valid/ready command and completion protocol in `docs/architecture/scalar_vector_interface.md`. Acceptance, completion, writeback, precise exceptions, backpressure, and reset cancellation are defined there. It is an RTL-independent boundary, not a vector ISA.
+Adopt the one-outstanding blocking valid/ready command and completion protocol in `docs/architecture/scalar_vector_interface.md`. Acceptance, completion, writeback, precise exceptions, backpressure, and reset cancellation are defined there. The experimental pipe adapter and deterministic stub exercise the protocol only; this remains separate from final vector ISA design.
 
 ## Consequences
 

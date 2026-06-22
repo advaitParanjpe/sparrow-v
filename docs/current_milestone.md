@@ -2,7 +2,12 @@
 
 ## Status
 
-Approved bounded experimental-integration milestone. `rtl/core/rv32_core.sv` remains the protected production/reference scalar core and must not change. `rtl/core/rv32_core_pipe.sv` remains experimental and is the only scalar integration candidate in scope. This milestone implements the approved v1 command/completion boundary with a stub engine; it does not implement a real vector architecture or promote the pipeline.
+Implementation complete in the working tree; pending human review and commit.
+`rtl/core/rv32_core.sv` remains the protected production/reference scalar core
+and must not change. `rtl/core/rv32_core_pipe.sv` remains experimental and is
+the only scalar integration candidate in scope. This milestone implements the
+approved v1 command/completion boundary with a stub engine; it does not
+implement a real vector architecture or promote the pipeline.
 
 ## Objective
 

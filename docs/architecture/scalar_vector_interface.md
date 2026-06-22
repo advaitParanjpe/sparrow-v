@@ -1,10 +1,14 @@
-# Scalar-to-Vector Boundary, v1 (RTL-independent)
+# Scalar-to-Vector Boundary, v1
 
 ## Scope
 
-This is a future integration contract, not implemented RTL or a vector ISA.
-Custom-0 (`0001011`) remains reserved under ADR-003; current scalar RTL traps
-it as illegal until a separately approved decode/integration milestone.
+This is the approved protocol contract and the basis of an implemented,
+experimental integration in `rv32_core_pipe`. It is not a vector ISA.
+`rv32_core.sv` remains unchanged and treats Custom-0 as illegal. The pipe
+implementation recognizes only these test encodings under Custom-0 (`0001011`,
+opcode `0x0b`): `funct3=000` is successful scalar-result stub execution,
+`001` is successful vector-only completion, and `010` is exceptional
+completion. They are experimental test encodings, not final Sparrow-V ISA.
 
 ## Command channel
 
@@ -18,7 +22,7 @@ reset.
 | Field | Width | v1 meaning |
 | --- | ---: | --- |
 | `vec_cmd_valid`, `vec_cmd_ready` | 1, 1 | Command handshake. |
-| `vec_cmd_op_class` | 4 | Reserved operation class; only values explicitly accepted by a later ISA ADR are legal. All other values complete as illegal-vector-operation. |
+| `vec_cmd_op_class` | 4 | Experimental stub operation class. The current pipe maps `funct3` into this field: 0=result, 1=vector-only, 2=exception. |
 | `vec_cmd_funct` | 8 | Opaque function/immediate selector for the later ISA. |
 | `vec_cmd_vs1`, `vec_cmd_vs2`, `vec_cmd_vd` | 5 each | Opaque vector-register indices; their implemented range is deferred. |
 | `vec_cmd_rs1_data`, `vec_cmd_rs2_data` | 32 each | Captured scalar operands. |
@@ -35,10 +39,10 @@ record rather than infer context from scalar internals.
 ## Completion channel
 
 The engine drives `vec_cpl_valid`; the scalar adapter drives
-`vec_cpl_ready`.  A completion is accepted exactly when both are high.  The
-engine holds all completion fields stable until accepted.  The adapter keeps
-ready high while waiting, except reset, so a completed blocking command cannot
-be lost.
+`vec_cpl_ready`. A completion is accepted exactly when both are high. The
+engine holds all completion fields stable until accepted. The current adapter
+accepts immediately by default; its test-only `VEC_CPL_READY_STALL` parameter
+exercises finite completion backpressure without changing the interface.
 
 | Field | Width | v1 meaning |
 | --- | ---: | --- |
@@ -70,6 +74,18 @@ acceptance, the instruction has not issued and normal scalar redirect/trap
 rules discard it.  Reset cancels the outstanding command architecturally:
 the vector engine must clear its active state and suppress any completion; no
 cancellation acknowledgement is needed in v1 because reset is system-wide.
+
+The implemented endpoint is `rtl/vector/rv32_vec_stub_engine.sv`, instantiated
+with deterministic latency 3 in focused integration tests. It captures only
+the operation class and scalar operands, returns `rs1 + rs2` for class 0,
+returns a result-invalid success for class 1, and returns status `01` with
+cause 2 for class 2. It has no vector register file, vector ALU, vector-memory
+interface, or sparse logic. Focused targets are
+`test-scalar-pipe-vec-stub`, `test-scalar-pipe-vec-cmd-stall`,
+`test-scalar-pipe-vec-cpl-stall`, `test-scalar-pipe-vec-exception`,
+`test-scalar-pipe-vec-no-writeback`, `test-scalar-pipe-vec-reset`,
+`test-scalar-pipe-vec-wrong-path`, and aggregate
+`test-scalar-pipe-vec-stub-all`.
 
 ## Initial vector-memory boundary: separate vector memory interface
 

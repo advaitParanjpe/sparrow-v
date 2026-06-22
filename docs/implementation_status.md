@@ -14,7 +14,16 @@
 - Differential verification covers the shared normal subset, including LB/LBU/LH/LHU/LW and SB/SH/SW. The harness checks normalized retirement/register/store traces, final register/memory/terminal state, directed extension and partial-store effects, including an immediate LHU-dependent ADDI, and memory-focused controlled-negative detection. At commit `5850b698`, immediate seeds 1–500 passed in 18.4 seconds; seeds 1–16 passed in each request-backpressured, delayed-response, and mixed mode; seed 17 was rerun in modes 0–3. The pipeline remains experimental; this is not formal equivalence.
 - Pipeline store-retirement trace repair: `rv32_core_pipe` now holds stores until the sole data response handshakes and emits one retirement event with the effective byte address, unshifted scalar data, and lane-positioned strobe. `make test-scalar-pipe-store-retire` checks SB offsets 0–3, SH offsets 0/2, SW, response delay, request backpressure, reset, a killed wrong-path store with no request/retirement/memory effect, and a valid target-path store with one retirement and memory effect; the normalized differential harness compares retirement-store events separately from accepted requests in modes 0–3 and detects a controlled address corruption.
 - Production-readiness conclusion: **C. Do not promote** `rv32_core_pipe`. The store-retirement interface blocker is repaired, but formal equivalence, coverage closure, synthesis/PPA evidence, and broad verification are still absent. `rv32_core.sv` remains production/reference.
-- Scalar interface v1 and the human-approved RTL-independent vector command/completion and separate memory boundary are specified in `docs/architecture/scalar_interface_freeze.md` and `docs/architecture/scalar_vector_interface.md`. No vector RTL or scalar promotion was performed.
+- Scalar interface v1 and the human-approved vector command/completion and separate memory boundary are specified in `docs/architecture/scalar_interface_freeze.md` and `docs/architecture/scalar_vector_interface.md`. No scalar promotion was performed.
+- Experimental scalar/vector protocol integration: `rv32_core_pipe` directly
+  exposes the v1 command/completion ports and `rtl/vector/rv32_vec_stub_engine.sv`
+  provides a latency-3 test endpoint. Custom-0 `funct3=000/001/010` exercise
+  scalar-result success, vector-only success, and precise exception. Focused
+  tests cover command/completion backpressure, one outstanding command,
+  reset cancellation, wrong-path suppression, exact-once events, and scalar
+  forward progress. This is not a real vector datapath, vector register file,
+  vector-memory interface, or sparse implementation; the pipe remains
+  experimental and `rv32_core.sv` remains production/reference.
 
 ## Planned, not implemented
 

@@ -2,6 +2,15 @@
 
 Append completed, human-reviewed milestones below. Pending-review implementation evidence must be explicitly marked and must not imply a commit. Do not reconstruct or invent prior entries.
 
+### Implement and verify the minimal scalar-to-vector command/completion adapter with a stub vector engine — implementation complete, pending human review — 2026-06-22
+
+- Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
+- Summary: direct experimental integration adds the approved blocking, in-order, one-command command/completion boundary to `rv32_core_pipe` and a standalone latency-3 deterministic stub. Custom-0 `funct3=000` returns `rs1 + rs2` to scalar `rd`; `001` completes and retires without scalar writeback; `010` completes exceptionally with precise PC and cause 2. These are test encodings, not the vector ISA.
+- Key files: `rtl/core/rv32_core_pipe.sv`, `rtl/vector/rv32_vec_stub_engine.sv`, `tb/integration/tb_scalar_pipe_vec_stub.sv`, shared pipe idle-port include, `Makefile`, and scalar/vector architecture and verification documentation.
+- Tests run and measured results: aggregate vector-stub regression passed all seven modes. Success, command-backpressure, completion-backpressure, and wrong-path target modes each reported 1 command, 1 completion, 1 vector retirement, 1 scalar writeback, and 0 vector traps. Vector-only reported 1 command, 1 completion, 1 retirement, 0 scalar writes, and 0 traps. Exception reported 1 command, 1 completion, PC `0x00000008`, cause 2, 0 successful retirements, and no scalar writeback. Reset cancellation reported only the fresh post-reset command: 1 command, 1 completion, and 1 retirement; the cancelled command produced no visible completion, retirement, writeback, or trap.
+- Known limitations: no real vector datapath/register file/vector memory/sparse logic, no full vector ISA, no formal equivalence, coverage closure, synthesis/PPA evidence, or broad randomized exceptional-case campaign. `rv32_core_pipe` remains experimental and is not promoted.
+- Follow-up work: human review and commit decision, then separately approved real vector-state, operation, and memory milestones.
+
 ### Repair and verify `rv32_core_pipe` store-retirement trace outputs — implementation complete, pending human review — 2026-06-22
 
 - Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.

@@ -5,6 +5,7 @@
 module scalar_diff_env #(parameter bit PIPE=0, parameter integer SEED=1, parameter integer MODE=0, parameter integer DEBUG=0) (
   input logic clk, input logic rst_n
 );
+  `include "tb/integration/vec_pipe_idle_ports.svh"
   localparam integer WORDS=128, DATA_BYTES=256, MAX_EVENTS=256;
   logic imem_req_valid,imem_req_ready,imem_resp_valid,imem_resp_ready;
   logic [31:0] imem_req_addr,imem_resp_data;

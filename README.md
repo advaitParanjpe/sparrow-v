@@ -6,7 +6,11 @@ Sparrow-V is a planned compact RV32I processor with a tightly coupled custom vec
 
 ## Current phase
 
-**Phase 1 — scalar RV32I baseline.** The original three-stage scalar RTL and directed simulation are implemented. Vector, sparse, scratchpad, FPGA, and ASIC implementation have not started.
+**Phase 1 — scalar RV32I baseline.** The protected production/reference scalar
+core and directed simulation are implemented. An experimental pipeline-only
+Custom-0 command/completion adapter and deterministic stub exercise the future
+vector boundary; real vector, sparse, and scratchpad implementation has not
+started.
 
 ## Planned subsystems
 
@@ -44,6 +48,7 @@ make test-scalar-diff-subword-directed
 make test-scalar-diff-subword-random
 make test-scalar-pipe-store-retire
 make test-scalar-diff-store-retire
+make test-scalar-pipe-vec-stub-all
 ```
 
 `check-scalar-throughput-experiment` (legacy alias `test-scalar-pipeline`) is a non-blocking historical Phase 1.7 experiment. It instantiates the production/reference core and intentionally fails its sustained-throughput target; it is not a required correctness regression.
