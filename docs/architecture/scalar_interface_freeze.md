@@ -5,9 +5,10 @@
 This specification freezes the integration contract of the protected
 production/reference implementation, `rtl/core/rv32_core.sv`, at commit
 `5850b69813207055f1f1c7c1eebcb5dd63bda14b`.  It does not promote
-`rv32_core_pipe`, whose same-named retirement-store outputs do not yet have
-the same semantics.  A future scalar/vector integration must depend on this
-document, not on scalar microarchitectural state or testbench hierarchy.
+`rv32_core_pipe`, which remains experimental despite matching the store
+retirement semantics verified by the bounded trace-repair milestone. A future
+scalar/vector integration must depend on this document, not on scalar
+microarchitectural state or testbench hierarchy.
 
 `rst_n` is synchronous and active low.  While reset is asserted, all valid
 outputs are deasserted and state/output counters are zeroed except `mtvec`,
@@ -42,9 +43,10 @@ only after their response.  They reset to zero.  Consumers requiring a
 software ABI must not rely on either signal.
 
 The retirement bundle is an integration trace contract, not a software ABI.
-Its store fields are semantic in the reference core.  `rv32_core_pipe` must
-not be substituted where this bundle is consumed until it implements and
-verifies equivalent store-retirement behavior.
+Its store fields are semantic in the reference core. `rv32_core_pipe` now
+implements and has directed/differential evidence for equivalent store-
+retirement behavior, but it remains experimental and must not be substituted
+for the reference core without a separate human promotion decision.
 
 ## Verification-only interfaces
 

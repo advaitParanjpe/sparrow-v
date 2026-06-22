@@ -21,7 +21,8 @@ module scalar_diff_env #(parameter bit PIPE=0, parameter integer SEED=1, paramet
   logic [31:0] trace_pc[0:MAX_EVENTS-1],trace_ins[0:MAX_EVENTS-1],trace_data[0:MAX_EVENTS-1];
   logic [4:0] trace_rd[0:MAX_EVENTS-1]; logic trace_we[0:MAX_EVENTS-1],trace_trap[0:MAX_EVENTS-1];
   logic [31:0] store_addr[0:MAX_EVENTS-1],store_data[0:MAX_EVENTS-1]; logic [3:0] store_strb[0:MAX_EVENTS-1];
-  integer trace_count,store_count,cycles,ireqs,dreqs,ipend,idelay,dpend,ddelay,iwait,dwait;
+  logic [31:0] retire_store_addr[0:MAX_EVENTS-1],retire_store_data[0:MAX_EVENTS-1]; logic [3:0] retire_store_strb[0:MAX_EVENTS-1];
+  integer trace_count,store_count,retire_store_count,cycles,ireqs,dreqs,ipend,idelay,dpend,ddelay,iwait,dwait;
   integer gen_lb,gen_lbu,gen_lh,gen_lhu,gen_lw,gen_sb,gen_sh,gen_sw;
   logic [31:0] iaddr,daddr,dwdata; logic dwrite; logic [3:0] dwstrb;
 
@@ -159,7 +160,7 @@ module scalar_diff_env #(parameter bit PIPE=0, parameter integer SEED=1, paramet
   integer k;
   always_ff @(posedge clk) begin
     if(!rst_n) begin
-      cycles<=0; ireqs<=0; dreqs<=0; ipend<=0; dpend<=0; idelay<=0; ddelay<=0; iwait<=0; dwait<=0; trace_count<=0; store_count<=0; terminal_seen<=0;
+      cycles<=0; ireqs<=0; dreqs<=0; ipend<=0; dpend<=0; idelay<=0; ddelay<=0; iwait<=0; dwait<=0; trace_count<=0; store_count<=0; retire_store_count<=0; terminal_seen<=0;
     end else begin
       cycles<=cycles+1;
       if(iwait!=0) iwait<=iwait-1;
@@ -171,16 +172,14 @@ module scalar_diff_env #(parameter bit PIPE=0, parameter integer SEED=1, paramet
       if(dmem_req_valid && dmem_req_ready) begin
         daddr<=dmem_req_addr; dwdata<=dmem_req_wdata; dwstrb<=dmem_req_wstrb; dwrite<=dmem_req_write; ddelay<=delay_for(dreqs,1); dwait<=stall_for(dreqs+1,1); dreqs<=dreqs+1;
         if(dmem_req_write && !terminal_seen) begin store_addr[store_count]<=dmem_req_addr; store_data[store_count]<=dmem_req_wdata; store_strb[store_count]<=dmem_req_wstrb; store_count<=store_count+1; end
-        if(PIPE && dmem_req_write) begin
-          if(dmem_req_wstrb[0]) data[dmem_req_addr]<=dmem_req_wdata[7:0]; if(dmem_req_wstrb[1]) data[dmem_req_addr+1]<=dmem_req_wdata[15:8]; if(dmem_req_wstrb[2]) data[dmem_req_addr+2]<=dmem_req_wdata[23:16]; if(dmem_req_wstrb[3]) data[dmem_req_addr+3]<=dmem_req_wdata[31:24];
-          dpend<=0;
-        end else dpend<=1;
+        dpend<=1;
       end else if(dpend && ddelay!=0) ddelay<=ddelay-1;
       else if(dmem_resp_valid && dmem_resp_ready) begin
         if(dwrite) begin if(dwstrb[0]) data[daddr]<=dwdata[7:0]; if(dwstrb[1]) data[daddr+1]<=dwdata[15:8]; if(dwstrb[2]) data[daddr+2]<=dwdata[23:16]; if(dwstrb[3]) data[daddr+3]<=dwdata[31:24]; end
         dpend<=0;
       end
       if(retire_valid && !terminal_seen) begin trace_pc[trace_count]<=retire_pc; trace_ins[trace_count]<=retire_instr; trace_we[trace_count]<=retire_rd_we; trace_rd[trace_count]<=retire_rd_we ? retire_rd : 0; trace_data[trace_count]<=retire_rd_we ? retire_rd_data : 0; trace_trap[trace_count]<=retire_trap; trace_count<=trace_count+1; end
+      if(retire_valid && retire_mem_we && !terminal_seen) begin retire_store_addr[retire_store_count]<=retire_mem_addr; retire_store_data[retire_store_count]<=retire_mem_data; retire_store_strb[retire_store_count]<=retire_mem_wstrb; retire_store_count<=retire_store_count+1; end
       if(retire_valid && retire_trap && !terminal_seen) begin
         terminal_seen<=1;
         for(k=0;k<32;k=k+1) begin
@@ -193,7 +192,7 @@ module scalar_diff_env #(parameter bit PIPE=0, parameter integer SEED=1, paramet
   initial build_program();
 endmodule
 
-module tb_scalar_differential #(parameter integer SEED=1, parameter integer MODE=0, parameter integer NEGATIVE=0, parameter integer NEGATIVE_MEMORY=0, parameter integer DEBUG=0);
+module tb_scalar_differential #(parameter integer SEED=1, parameter integer MODE=0, parameter integer NEGATIVE=0, parameter integer NEGATIVE_MEMORY=0, parameter integer NEGATIVE_STORE_RETIRE=0, parameter integer DEBUG=0);
   logic clk=0,rst_n=0; always #5 clk=~clk;
   scalar_diff_env #(.PIPE(0),.SEED(SEED),.MODE(MODE)) reference(.clk,.rst_n);
   scalar_diff_env #(.PIPE(1),.SEED(SEED),.MODE(MODE),.DEBUG(DEBUG)) pipeline(.clk,.rst_n);
@@ -249,20 +248,27 @@ module tb_scalar_differential #(parameter integer SEED=1, parameter integer MODE
       $fatal(1);
     end
     @(posedge clk);
+    negative_detected=0;
     if(reference.mepc!==pipeline.mepc || reference.mcause!==pipeline.mcause) fail("terminal",0);
     limit=(reference.trace_count<pipeline.trace_count)?reference.trace_count:pipeline.trace_count;
     for(i=0;i<limit;i=i+1) if(reference.trace_pc[i]!==pipeline.trace_pc[i] || reference.trace_ins[i]!==pipeline.trace_ins[i] || reference.trace_we[i]!==pipeline.trace_we[i] || reference.trace_rd[i]!==pipeline.trace_rd[i] || reference.trace_data[i]!==pipeline.trace_data[i] || reference.trace_trap[i]!==pipeline.trace_trap[i]) fail("retirement-trace",i);
     if(reference.trace_count!==pipeline.trace_count) begin $display("DIFF retirement counts ref=%0d pipe=%0d",reference.trace_count,pipeline.trace_count); fail("retirement-count",0); end
     if(reference.store_count!==pipeline.store_count) fail("store-count",0);
     for(i=0;i<reference.store_count;i=i+1) if(reference.store_addr[i]!==pipeline.store_addr[i] || reference.store_data[i]!==pipeline.store_data[i] || reference.store_strb[i]!==pipeline.store_strb[i]) fail("store-trace",i);
+    if(NEGATIVE_STORE_RETIRE!=0) pipeline.retire_store_addr[0]=pipeline.retire_store_addr[0]^32'h1;
+    if(reference.retire_store_count!==pipeline.retire_store_count) $fatal(1,"STORE RETIRE COUNT MISMATCH seed=%0d mode=%0d ref=%0d pipe=%0d",SEED,MODE,reference.retire_store_count,pipeline.retire_store_count);
+    for(i=0;i<reference.retire_store_count;i=i+1) if(reference.retire_store_addr[i]!==pipeline.retire_store_addr[i] || reference.retire_store_data[i]!==pipeline.retire_store_data[i] || reference.retire_store_strb[i]!==pipeline.retire_store_strb[i]) begin
+      if(NEGATIVE_STORE_RETIRE!=0) negative_detected=1;
+      else $fatal(1,"STORE RETIRE MISMATCH seed=%0d mode=%0d index=%0d ref={addr=%h data=%h strb=%h} pipe={addr=%h data=%h strb=%h}",SEED,MODE,i,reference.retire_store_addr[i],reference.retire_store_data[i],reference.retire_store_strb[i],pipeline.retire_store_addr[i],pipeline.retire_store_data[i],pipeline.retire_store_strb[i]);
+    end
     for(i=0;i<32;i=i+1) if(reference.regs_snapshot[i]!==pipeline.regs_snapshot[i]) fail("final-register",i);
     for(i=0;i<256;i=i+1) if(reference.data_snapshot[i]!==pipeline.data_snapshot[i]) fail("final-memory",i);
     directed_checks();
-    negative_detected=0;
     if(NEGATIVE!=0) begin if(reference.regs_snapshot[2] !== (pipeline.regs_snapshot[2]^32'h1)) negative_detected=1; if(!negative_detected) $fatal(1,"negative checker did not detect perturbation"); $display("DIFF NEGATIVE DETECTED seed=%0d injected=final-register-x2",SEED); end
     if(NEGATIVE_MEMORY!=0) begin pipeline.data_snapshot[205]=pipeline.data_snapshot[205]^8'h1; if(reference.data_snapshot[205]!==pipeline.data_snapshot[205]) negative_detected=1; else $fatal(1,"memory negative checker did not detect perturbation"); $display("DIFF NEGATIVE DETECTED seed=%0d injected=final-memory-byte-205",SEED); end
+    if(NEGATIVE_STORE_RETIRE!=0) begin if(!negative_detected) $fatal(1,"store-retirement negative checker did not detect perturbation"); $display("DIFF NEGATIVE DETECTED seed=%0d injected=pipeline-store-retirement-address",SEED); end
     $display("DIFF MIX seed=%0d lb=%0d lbu=%0d lh=%0d lhu=%0d lw=%0d sb=%0d sh=%0d sw=%0d",SEED,reference.gen_lb,reference.gen_lbu,reference.gen_lh,reference.gen_lhu,reference.gen_lw,reference.gen_sb,reference.gen_sh,reference.gen_sw);
-    $display("DIFF PASS seed=%0d mode=%0d retire=%0d stores=%0d ref_cycles=%0d pipe_cycles=%0d negative=%0d",SEED,MODE,reference.trace_count,reference.store_count,reference.cycle_count,pipeline.cycle_count,negative_detected);
+    $display("DIFF PASS seed=%0d mode=%0d retire=%0d stores=%0d store_retires=%0d ref_cycles=%0d pipe_cycles=%0d negative=%0d",SEED,MODE,reference.trace_count,reference.store_count,reference.retire_store_count,reference.cycle_count,pipeline.cycle_count,negative_detected);
     $finish;
   end
 endmodule

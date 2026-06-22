@@ -9,6 +9,7 @@
 - Focused development-pipeline targets: `test-scalar-pipe-dev`, `test-scalar-pipe-alu`, `test-scalar-pipe-forward`, `test-scalar-pipe-control`, and `test-scalar-pipe-redirect`. Their status must be established in the current tree; they are not a substitute for production regression.
 - `check-scalar-throughput-experiment` (legacy alias `test-scalar-pipeline`) is a non-blocking expected-fail Phase 1.7 throughput experiment. It instantiates `rv32_core`, not `rv32_core_pipe`, and is excluded from required correctness regressions pending the documented broad pipeline-control redesign.
 - Differential targets: `test-scalar-diff-smoke`, `test-scalar-diff-random` (32 seeds), `test-scalar-diff-stall` (seed 17, modes 1/2/3), `test-scalar-diff-seed SEED=<n> MODE=<n>`, `test-scalar-diff-negative`, and `test-scalar-diff-redirect-backpressure`. Subword targets are `test-scalar-diff-subword-directed`, `test-scalar-diff-subword-random` (128 immediate-mode seeds), `test-scalar-diff-subword-stall` (seed 17, modes 1/2/3), `test-scalar-diff-subword-seed SEED=<n> MODE=<n>`, and `test-scalar-diff-subword-negative`.
+- Store-retirement targets: `test-scalar-pipe-store-retire` is a focused delayed-response/backpressured pipeline check covering subword lanes, a killed wrong-path store, and a valid target-path store; `test-scalar-diff-store-retire` compares normalized store-retirement events for seed 17 in modes 0–3; `test-scalar-diff-store-retire-negative` corrupts one collected pipeline retirement address and requires detection.
 
 ## Completion rule
 
@@ -24,7 +25,7 @@ At clean commit `5850b69813207055f1f1c7c1eebcb5dd63bda14b`, all Phase-1 commands
 
 `make check-scalar-throughput-experiment` was run separately and failed as expected (exit 2): 52 cycles, 16 retired instructions, maximum consecutive retirements 1, and 16 gaps. It remains non-blocking and supports no throughput claim.
 
-Human review approved the resulting architecture decisions: `rv32_core` remains the production/reference core; `rv32_core_pipe` remains experimental because its store-retirement trace contract is incomplete; and the blocking one-command scalar-to-vector protocol is an approved RTL-independent v1 specification. No vector RTL has been implemented.
+Human review approved the resulting architecture decisions: `rv32_core` remains the production/reference core; `rv32_core_pipe` remains experimental even though its store-retirement trace contract is now implemented and directly verified. Promotion is not automatic and requires later human review. Remaining limits include no formal equivalence, coverage closure, synthesis/PPA evidence, or broad exceptional-case randomized verification. The blocking one-command scalar-to-vector protocol remains an approved RTL-independent v1 specification, and no vector RTL has been implemented.
 
 ## Milestone regression guidance
 

@@ -2,6 +2,15 @@
 
 Append completed, human-reviewed milestones below. Pending-review implementation evidence must be explicitly marked and must not imply a commit. Do not reconstruct or invent prior entries.
 
+### Repair and verify `rv32_core_pipe` store-retirement trace outputs — implementation complete, pending human review — 2026-06-22
+
+- Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
+- Summary: pipeline stores now wait for the sole data-response handshake before retiring and report effective byte address, unshifted scalar data, and little-endian lane strobe. The focused regression proves both a killed wrong-path store has no request, retirement, or memory side effect and a valid taken-branch target store retires and writes memory exactly once. The differential harness separately compares normalized retirement-store events rather than treating accepted store requests as a substitute.
+- Key files: `rtl/core/rv32_core_pipe.sv`, `tb/integration/tb_scalar_pipe_store_retire.sv`, `tb/integration/tb_scalar_differential.sv`, `Makefile`, scalar status/verification documentation.
+- Tests run and measured results: all milestone commands passed in the current tree. Focused regression reports 8 requests, 8 responses, and 8 retirements, one target-path memory write, and zero killed-store retirements. Differential seed 17 passed modes 0–3; mode 3 reports 25 stores and 25 store retirements in 451 cycles for both cores. The controlled-negative target detected its injected pipeline retirement-address corruption.
+- Known limitations: no formal equivalence, coverage closure, synthesis/PPA evidence, or broad randomized trap/illegal campaign. The pipeline remains experimental and is not promoted.
+- Follow-up work: human review of the trace-repair evidence before any separate promotion reassessment.
+
 ### Pipeline production-readiness review and scalar-to-vector interface definition — complete, human-reviewed and approved, uncommitted — 2026-06-22
 
 - Reference: clean entry and evidence commit `5850b69813207055f1f1c7c1eebcb5dd63bda14b`; human review approved the recorded architecture decisions. No commit was created by this milestone, and its documentation changes remain uncommitted.

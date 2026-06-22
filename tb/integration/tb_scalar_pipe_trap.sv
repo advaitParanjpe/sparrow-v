@@ -12,7 +12,7 @@ module tb_scalar_pipe_trap;
   logic [4:0] retire_rd; logic [3:0] retire_mem_wstrb;
   logic [63:0] imem_stall_cycles,dmem_stall_cycles,dep_stall_cycles,control_flush_cycles;
   logic [31:0] imem[0:15],dmem[0:3];
-  integer i,test_id,expected_cause,expected_pc,fault_rd,normal_retires,post_trap_retires;
+  integer i,test_id,expected_cause,expected_pc,fault_rd,normal_retires,post_trap_retires,store_retires;
   logic expect_load,expect_store,terminal_seen;
 
   rv32_core_pipe dut(.*);
@@ -33,7 +33,7 @@ module tb_scalar_pipe_trap;
   always_ff @(posedge clk) begin
     if(!rst_n) begin
       imem_resp_valid<=0; dmem_resp_valid<=0;
-      normal_retires<=0; post_trap_retires<=0; terminal_seen<=0;
+      normal_retires<=0; post_trap_retires<=0; store_retires<=0; terminal_seen<=0;
     end else begin
       if(imem_resp_valid&&imem_resp_ready) imem_resp_valid<=0;
       if(imem_req_valid&&imem_req_ready) begin
@@ -46,6 +46,7 @@ module tb_scalar_pipe_trap;
           if(dmem_req_wstrb[1]) dmem[dmem_req_addr[3:2]][15:8]<=dmem_req_wdata[15:8];
           if(dmem_req_wstrb[2]) dmem[dmem_req_addr[3:2]][23:16]<=dmem_req_wdata[23:16];
           if(dmem_req_wstrb[3]) dmem[dmem_req_addr[3:2]][31:24]<=dmem_req_wdata[31:24];
+          dmem_resp_valid<=1; dmem_resp_data<=0;
         end else begin
           dmem_resp_valid<=1; dmem_resp_data<=dmem[dmem_req_addr[3:2]];
         end
@@ -55,6 +56,7 @@ module tb_scalar_pipe_trap;
         else normal_retires<=normal_retires+1;
       end
       if(retire_valid&&retire_trap) terminal_seen<=1;
+      if(retire_mem_we) store_retires<=store_retires+1;
     end
   end
 
@@ -89,7 +91,7 @@ module tb_scalar_pipe_trap;
         $fatal(1,"trap case %0d retirement/x0/younger register side effect",id);
       if(expect_load && dut.rf.regs[fault_rd]!==0)
         $fatal(1,"trap case %0d faulting load wrote x%0d",id,fault_rd);
-      if(expect_store && (dmem[0]!==32'h11223344 || dmem[1]!==32'h55667788 || dmem[2]!==32'h99aabbcc || dmem[3]!==32'hddeeff00))
+      if(expect_store && (store_retires!=0 || retire_mem_we || dmem[0]!==32'h11223344 || dmem[1]!==32'h55667788 || dmem[2]!==32'h99aabbcc || dmem[3]!==32'hddeeff00))
         $fatal(1,"trap case %0d faulting store changed memory",id);
       repeat(8) @(negedge clk);
       if(post_trap_retires!=0 || dut.rf.regs[0]!==0 || dut.rf.regs[7]!==0)

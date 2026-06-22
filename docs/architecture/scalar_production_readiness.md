@@ -16,9 +16,9 @@ simulation evidence for the exercised subset, not formal equivalence or PPA.
 | Memory | One request/response per port, aligned port address, byte strobes and little-endian lane selection in `rv32_core.sv`; directed test exercises latency/backpressure. | Same intended protocol and subword dataport alignment; focused memory plus differential modes exercise it. |
 | Fetch/redirect | Request buffer plus epochs documented in `fetch_frontend.md`; directed delayed/backpressured test passes. | Generation bookkeeping and stale-response redirect focused regression pass, including held request/response case. |
 | Hazards and counters | Conservative no-overlap DX/MW interlock with limited result forwarding; counters and retirement bundle are explicitly implemented. | ALU forwarding and MW blocking are exercised by focused tests. Many internal counters are development monitors only. |
-| Retirement trace | `retire_*` reports completed stores and normal/trap events (`rv32_core.sv`). | `retire_mem_we/addr/data/wstrb` are constant zero (`rv32_core_pipe.sv`), despite store completion. The harness compares accepted store requests instead, so it does not prove this interface. |
+| Retirement trace | `retire_*` reports completed stores and normal/trap events (`rv32_core.sv`). | Store retirement now waits for the data-response handshake and reports effective byte address, unshifted scalar data, and lane strobe. Focused and normalized differential checks cover the bundle; this does not establish broader readiness. |
 | External interface/synthesis | Ports are the frozen v1 reference-core integration contract. Assertions are simulation checks; no synthesis flow has been run. | Same broad port list but not identical semantics; hierarchy-coupled focused tests read development internals. Assertions/system tasks still require synthesis treatment. |
-| Verification depth/blind spots | One directed integration test plus common differential reference role. No randomized program generator, coverage closure, formal, or PPA. | Focused tests, controlled negatives, and differential campaign establish tested functional agreement only. No direct pipe retirement-store check, formal, coverage, or synthesis evidence. |
+| Verification depth/blind spots | One directed integration test plus common differential reference role. No randomized program generator, coverage closure, formal, or PPA. | Focused store-retirement, controlled-negative, and differential checks establish tested functional agreement only. No formal, coverage, or synthesis evidence. |
 | Performance | Throughput is intentionally not established; the non-blocking experiment on the reference core fails its target. | ALU test shows local consecutive retirements, but no end-to-end sustained-throughput/timing/area evidence. |
 
 ## Separate readiness ratings
@@ -26,20 +26,19 @@ simulation evidence for the exercised subset, not formal equivalence or PPA.
 | Category | `rv32_core` | `rv32_core_pipe` |
 | --- | --- | --- |
 | Correctness readiness | Limited production/reference readiness for the documented directed subset and memory modes. | Tested-subset confidence only; differential agreement is encouraging but bounded. |
-| Interface stability | v1 frozen by `scalar_interface_freeze.md`. | Not stable: store-retirement trace semantics conflict with v1. |
-| Verification maturity | Low-to-moderate directed maturity; no formal/randomized coverage closure. | Low-to-moderate focused/differential maturity; direct trace gap remains. |
+| Interface stability | v1 frozen by `scalar_interface_freeze.md`. | Store-retirement semantics now match v1 in the bounded campaign; the pipeline remains an unfrozen experimental integration candidate. |
+| Verification maturity | Low-to-moderate directed maturity; no formal/randomized coverage closure. | Low-to-moderate focused/differential maturity; the direct store-trace gap is closed, but broad verification is absent. |
 | Performance readiness | Not ready; expected throughput experiment fails. | Not ready; no system performance or implementation evidence. |
 | Production naming/integration readiness | Retains production/reference role; no synthesized integration proof. | Not ready; remains experimental and must not be substituted. |
 
 ## Decision
 
-**C. Do not promote `rv32_core_pipe`.**  ADR-012 records the decision.  The
-concrete blocker is the false `retire_mem_*` contract, not a stylistic
-preference.  Required bounded follow-up: define and implement matching pipe
-store retirement fields, add direct assertions/differential comparison of
-them, then rerun the campaign before a new promotion decision.  `rv32_core`
-remains the reference model and production integration core; no naming change
-or RTL promotion is authorized.
+**C. Do not promote `rv32_core_pipe`.** ADR-012 remains unchanged. The
+store-retirement contract blocker was repaired and directly checked in the
+bounded milestone, but the remaining limits—no formal equivalence, coverage
+closure, synthesis/PPA evidence, or broad randomized verification—still
+preclude promotion. `rv32_core` remains the reference model and production
+integration core; no naming change or RTL promotion is authorized.
 
 `retire_*` is an integration trace contract for the frozen reference core;
 `cycle_count`/`instret_count` are debug/integration observability, not CSR

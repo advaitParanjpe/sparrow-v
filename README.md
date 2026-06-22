@@ -42,6 +42,8 @@ make test
 make sim-scalar
 make test-scalar-diff-subword-directed
 make test-scalar-diff-subword-random
+make test-scalar-pipe-store-retire
+make test-scalar-diff-store-retire
 ```
 
 `check-scalar-throughput-experiment` (legacy alias `test-scalar-pipeline`) is a non-blocking historical Phase 1.7 experiment. It instantiates the production/reference core and intentionally fails its sustained-throughput target; it is not a required correctness regression.

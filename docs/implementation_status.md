@@ -12,7 +12,8 @@
 - Development memory behavior is experimental. The focused `make test-scalar-pipe-memory` regression passed in this checkpoint after its test data was corrected, but it is not production integration evidence.
 - Focused pipeline terminal-trap verification is available as `make test-scalar-pipe-trap`. It directly covers control-target, LH/LW, and SH/SW misalignment causes, fault PCs, suppressed load/store side effects, terminal retirement, and x0 preservation.
 - Differential verification covers the shared normal subset, including LB/LBU/LH/LHU/LW and SB/SH/SW. The harness checks normalized retirement/register/store traces, final register/memory/terminal state, directed extension and partial-store effects, including an immediate LHU-dependent ADDI, and memory-focused controlled-negative detection. At commit `5850b698`, immediate seeds 1–500 passed in 18.4 seconds; seeds 1–16 passed in each request-backpressured, delayed-response, and mixed mode; seed 17 was rerun in modes 0–3. The pipeline remains experimental; this is not formal equivalence.
-- Production-readiness conclusion: **C. Do not promote** `rv32_core_pipe`. Its `retire_mem_*` outputs are hardwired zero, unlike the reference core's accepted-store retirement trace. The differential harness compares accepted stores rather than those pipe outputs, so interface equivalence is unproven and currently false for that bundle. `rv32_core.sv` remains production/reference.
+- Pipeline store-retirement trace repair: `rv32_core_pipe` now holds stores until the sole data response handshakes and emits one retirement event with the effective byte address, unshifted scalar data, and lane-positioned strobe. `make test-scalar-pipe-store-retire` checks SB offsets 0–3, SH offsets 0/2, SW, response delay, request backpressure, reset, a killed wrong-path store with no request/retirement/memory effect, and a valid target-path store with one retirement and memory effect; the normalized differential harness compares retirement-store events separately from accepted requests in modes 0–3 and detects a controlled address corruption.
+- Production-readiness conclusion: **C. Do not promote** `rv32_core_pipe`. The store-retirement interface blocker is repaired, but formal equivalence, coverage closure, synthesis/PPA evidence, and broad verification are still absent. `rv32_core.sv` remains production/reference.
 - Scalar interface v1 and the human-approved RTL-independent vector command/completion and separate memory boundary are specified in `docs/architecture/scalar_interface_freeze.md` and `docs/architecture/scalar_vector_interface.md`. No vector RTL or scalar promotion was performed.
 
 ## Planned, not implemented
@@ -28,6 +29,7 @@ Vector engine/ISA, vector memory, INT8/INT16 lanes, masks/reductions/dot product
 | Repository checks | `scripts/check_repo.py`, `tb/tests/` | `make check`, `make test-repo` |
 | Lint | all `rtl/**/*.sv` | `make lint` |
 | Subword differential verification | `tb/integration/tb_scalar_differential.sv` | `make test-scalar-diff-subword-directed`, `make test-scalar-diff-subword-random`, `make test-scalar-diff-subword-stall` |
+| Pipeline store-retirement verification | `tb/integration/tb_scalar_pipe_store_retire.sv`, `tb/integration/tb_scalar_differential.sv` | `make test-scalar-pipe-store-retire`, `make test-scalar-diff-store-retire` |
 
 ## Environmental blockers
 

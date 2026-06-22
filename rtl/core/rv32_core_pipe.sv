@@ -12,7 +12,7 @@ module rv32_core_pipe #(parameter logic [31:0] RESET_PC=0, parameter logic [31:0
   logic [63:0] taken_branch_redirects,non_taken_branches,wrong_path_fetches,stale_responses;
   logic [31:0] dx_pc,dx_ins,dx_src1,dx_src2,dx_imm; logic [4:0] dx_rs1,dx_rs2,dx_rd;
   logic dx_uses_rs1,dx_uses_rs2,dx_use_imm,dx_reg_write,dx_lui,dx_auipc,dx_ecall,dx_illegal,dx_branch,dx_branch_unsigned,dx_jal,dx_jalr,dx_mem,dx_store,dx_load_unsigned; logic [1:0] dx_branch_kind; alu_op_t dx_alu_op; mem_size_t dx_mem_size;
-  logic [31:0] mw_pc,mw_ins,mw_y,mw_cause,mw_addr,mw_wdata; logic [4:0] mw_rd; logic [3:0] mw_wstrb; logic mw_we,mw_terminal,mw_illegal,mw_mem,mw_store,mw_load_unsigned; mem_size_t mw_mem_size; logic [1:0] mw_mem_state;
+  logic [31:0] mw_pc,mw_ins,mw_y,mw_cause,mw_addr,mw_wdata,mw_store_data; logic [4:0] mw_rd; logic [3:0] mw_wstrb; logic mw_we,mw_terminal,mw_illegal,mw_mem,mw_store,mw_load_unsigned; mem_size_t mw_mem_size; logic [1:0] mw_mem_state;
   logic if_legal,if_reg_write,if_use_imm,if_ecall,if_ebreak,if_load_unsigned,if_branch,if_branch_unsigned,if_jal,if_jalr;
   logic [1:0] if_result_sel,if_branch_kind; alu_op_t if_alu_op; mem_op_t if_mem_op; mem_size_t if_mem_size;
   logic [31:0] if_imm,rf_rs1,rf_rs2,if_src1_capture,if_src2_capture;
@@ -61,30 +61,30 @@ module rv32_core_pipe #(parameter logic [31:0] RESET_PC=0, parameter logic [31:0
   assign imem_req_valid=req_v&&(!out_v||(imem_resp_valid&&imem_resp_ready))&&!mw_terminal&&!trap_valid; assign imem_req_addr=req_addr; assign req_fire=imem_req_valid&&imem_req_ready;
   // A response is always consumed when stale; only a current-generation response may occupy IF.
   assign imem_resp_ready=out_v&&((out_gen!=fetch_gen)||dx_redirect||!if_v||if_to_dx); assign resp_fire=imem_resp_valid&&imem_resp_ready;
-  assign dmem_req_valid=mw_v&&mw_mem&&mw_mem_state==0; assign dmem_req_write=mw_store; assign dmem_req_addr={mw_addr[31:2],2'b00}; assign dmem_req_wdata=mw_wdata; assign dmem_req_wstrb=mw_wstrb; assign dmem_resp_ready=mw_v&&mw_mem&&!mw_store&&mw_mem_state==1; assign dmem_req_fire=dmem_req_valid&&dmem_req_ready;assign dmem_resp_fire=dmem_resp_valid&&dmem_resp_ready;
+  assign dmem_req_valid=mw_v&&mw_mem&&mw_mem_state==0; assign dmem_req_write=mw_store; assign dmem_req_addr={mw_addr[31:2],2'b00}; assign dmem_req_wdata=mw_wdata; assign dmem_req_wstrb=mw_wstrb; assign dmem_resp_ready=mw_v&&mw_mem&&mw_mem_state==1; assign dmem_req_fire=dmem_req_valid&&dmem_req_ready;assign dmem_resp_fire=dmem_resp_valid&&dmem_resp_ready;
   always_comb begin case(mw_mem_size) SZ_BYTE: load_data=mw_load_unsigned?{24'd0,dmem_resp_data[8*mw_addr[1:0]+:8]}:{{24{dmem_resp_data[8*mw_addr[1:0]+7]}},dmem_resp_data[8*mw_addr[1:0]+:8]}; SZ_HALF: load_data=mw_load_unsigned?{16'd0,dmem_resp_data[16*mw_addr[1]+:16]}:{{16{dmem_resp_data[16*mw_addr[1]+15]}},dmem_resp_data[16*mw_addr[1]+:16]}; default: load_data=dmem_resp_data; endcase end
-  assign retire_mem_we=0; assign retire_mem_addr=0; assign retire_mem_data=0; assign retire_mem_wstrb=0;
 
   always_ff @(posedge clk) begin
     if(!rst_n) begin
       req_addr<=RESET_PC; req_gen<=0; req_v<=1; out_v<=0; if_v<=0; dx_v<=0; mw_v<=0; fetch_gen<=0; redirect_pending<=0; pending_target<=0;
-      mw_we<=0; mw_terminal<=0; mw_illegal<=0; mw_rd<=0; mw_y<=0; mw_cause<=0; mw_mem<=0;mw_store<=0;mw_mem_state<=0;mw_addr<=0;mw_wdata<=0;mw_wstrb<=0; trap_valid<=0; mepc<=0; mcause<=0; mtvec<=MTVEC_RESET; cycle_count<=0; instret_count<=0;
-      retire_valid<=0; retire_trap<=0; retire_rd_we<=0; retire_pc<=0; retire_instr<=0; retire_rd<=0; retire_rd_data<=0; retire_cause<=0;
+      mw_we<=0; mw_terminal<=0; mw_illegal<=0; mw_rd<=0; mw_y<=0; mw_cause<=0; mw_mem<=0;mw_store<=0;mw_mem_state<=0;mw_addr<=0;mw_wdata<=0;mw_store_data<=0;mw_wstrb<=0; trap_valid<=0; mepc<=0; mcause<=0; mtvec<=MTVEC_RESET; cycle_count<=0; instret_count<=0;
+      retire_valid<=0; retire_trap<=0; retire_rd_we<=0; retire_mem_we<=0; retire_pc<=0; retire_instr<=0; retire_rd<=0; retire_rd_data<=0; retire_mem_addr<=0; retire_mem_data<=0; retire_mem_wstrb<=0; retire_cause<=0;
       imem_stall_cycles<=0; dmem_stall_cycles<=0; dep_stall_cycles<=0; control_flush_cycles<=0; taken_branch_redirects<=0; non_taken_branches<=0; wrong_path_fetches<=0; stale_responses<=0;load_instructions<=0;store_instructions<=0;load_response_wait_cycles<=0;load_use_stall_cycles<=0;misaligned_memory_ops<=0;
     end else begin
-      cycle_count<=cycle_count+1; retire_valid<=0; retire_trap<=0; retire_rd_we<=0;
+      cycle_count<=cycle_count+1; retire_valid<=0; retire_trap<=0; retire_rd_we<=0; retire_mem_we<=0;
       if(imem_req_valid&&!imem_req_ready) imem_stall_cycles<=imem_stall_cycles+1;
       if(dmem_req_valid&&!dmem_req_ready) dmem_stall_cycles<=dmem_stall_cycles+1;
       if(mw_v&&mw_mem&&!mw_store&&mw_mem_state==1&&!dmem_resp_fire) load_response_wait_cycles<=load_response_wait_cycles+1;
       if(mw_v&&mw_mem&&!mw_complete&&dx_v&&((dx_uses_rs1&&dx_rs1==mw_rd)||(dx_uses_rs2&&dx_rs2==mw_rd))&&mw_rd!=0) load_use_stall_cycles<=load_use_stall_cycles+1;
-      if(dmem_req_fire) begin if(mw_store) mw_mem_state<=2; else mw_mem_state<=1; end
+      if(dmem_req_fire) mw_mem_state<=1;
       if(dmem_resp_fire) begin mw_y<=load_data;mw_mem_state<=2;end
       if(mw_retire) begin
         retire_valid<=1; retire_pc<=mw_pc; retire_instr<=mw_ins; retire_rd_we<=mw_we&&mw_rd!=0&&!mw_terminal; retire_rd<=mw_rd; retire_rd_data<=mw_y;
+        if(mw_store&&!mw_terminal) begin retire_mem_we<=1; retire_mem_addr<=mw_addr; retire_mem_data<=mw_store_data; retire_mem_wstrb<=mw_wstrb; end
         if(mw_terminal) begin trap_valid<=1;mepc<=mw_pc;mcause<=mw_cause;retire_trap<=1;retire_cause<=mw_cause;end else instret_count<=instret_count+1;
         mw_v<=0;mw_we<=0;mw_terminal<=0;mw_illegal<=0;mw_mem<=0;
       end
-      if(dx_to_mw) begin mw_v<=1;mw_pc<=dx_pc;mw_ins<=dx_ins;mw_rd<=dx_rd;mw_we<=dx_reg_write&&!dx_terminal;mw_y<=dx_y;mw_terminal<=dx_terminal;mw_illegal<=dx_illegal;mw_cause<=dx_cause;mw_mem<=dx_mem&&!dx_terminal;mw_store<=dx_store;mw_mem_size<=dx_mem_size;mw_load_unsigned<=dx_load_unsigned;mw_addr<=dx_mem_addr;mw_wdata<=dx_store_wdata;mw_wstrb<=dx_store_wstrb;mw_mem_state<=0; if(dx_mem&&dx_mem_misaligned)misaligned_memory_ops<=misaligned_memory_ops+1; if(dx_mem&&!dx_store)load_instructions<=load_instructions+1; if(dx_mem&&dx_store)store_instructions<=store_instructions+1;dx_v<=0;end
+      if(dx_to_mw) begin mw_v<=1;mw_pc<=dx_pc;mw_ins<=dx_ins;mw_rd<=dx_rd;mw_we<=dx_reg_write&&!dx_terminal;mw_y<=dx_y;mw_terminal<=dx_terminal;mw_illegal<=dx_illegal;mw_cause<=dx_cause;mw_mem<=dx_mem&&!dx_terminal;mw_store<=dx_store;mw_mem_size<=dx_mem_size;mw_load_unsigned<=dx_load_unsigned;mw_addr<=dx_mem_addr;mw_wdata<=dx_store_wdata;mw_store_data<=dx_store_data;mw_wstrb<=dx_store_wstrb;mw_mem_state<=0; if(dx_mem&&dx_mem_misaligned)misaligned_memory_ops<=misaligned_memory_ops+1; if(dx_mem&&!dx_store)load_instructions<=load_instructions+1; if(dx_mem&&dx_store)store_instructions<=store_instructions+1;dx_v<=0;end
       // Redirect has priority over IF consumption and response buffering.
       if(dx_redirect) begin
         fetch_gen<=fetch_gen+1; if_v<=0; control_flush_cycles<=control_flush_cycles+1; wrong_path_fetches<=wrong_path_fetches+(if_v?1:0);

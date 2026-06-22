@@ -2,13 +2,13 @@
 
 ## Status
 
-Approved bounded correctness and observability milestone. `rtl/core/rv32_core.sv` remains the protected production/reference scalar implementation. `rtl/core/rv32_core_pipe.sv` remains experimental. This milestone repairs and verifies only the pipeline store-retirement trace contract; it does not promote, rename, replace, or otherwise integrate either core.
+Implementation complete, pending human review and commit. `rtl/core/rv32_core.sv` remains the protected production/reference scalar implementation. `rtl/core/rv32_core_pipe.sv` remains experimental. This milestone repaired and verified only the pipeline store-retirement trace contract; it did not promote, rename, replace, or otherwise integrate either core.
 
 ## Objective
 
 Make `rv32_core_pipe` contract-compatible with the frozen v1 scalar retirement interface by accurately reporting retired store instructions through `retire_mem_we`, `retire_mem_addr`, `retire_mem_data`, and `retire_mem_wstrb`, while preserving all existing scalar behavior.
 
-The current blocker is concrete: the pipeline continuously drives all four fields to zero. The reference core emits a one-cycle store-retirement event when the outstanding store's data-memory response handshakes. It reports the effective byte address, unshifted scalar store operand, and the request's little-endian lane strobe. The pipeline must match that architectural event and representation; matching port names or accepted store requests is insufficient.
+At milestone entry, the pipeline continuously drove all four fields to zero. The reference core emits a one-cycle store-retirement event when the outstanding store's data-memory response handshakes. It reports the effective byte address, unshifted scalar store operand, and the request's little-endian lane strobe. The repaired pipeline now matches that architectural event and representation; matching port names or accepted store requests alone remains insufficient evidence.
 
 ## Entry baseline and audit requirements
 

@@ -4,7 +4,7 @@
 
 The repository contains a scalar RV32I baseline and a separate development pipeline. `rtl/core/rv32_core.sv` is the protected production/reference scalar implementation. It is a three-stage, single-issue in-order IF/DX/MW design with external instruction and data valid/ready interfaces, terminal simulation-oriented traps, and the directed integration test in `tb/integration/tb_scalar_core.sv`.
 
-`rtl/core/rv32_core_pipe.sv` is an isolated experimental implementation. The human-approved production-readiness assessment selected **C. Do not promote**: its `retire_mem_*` ports are constant zero while the reference core emits store retirement data, so identical port names do not establish compatible trace semantics. `rv32_core.sv` remains the protected production/reference core.
+`rtl/core/rv32_core_pipe.sv` is an isolated experimental implementation. Its store-retirement trace now matches the frozen reference representation in bounded focused and differential verification, but the human-approved production-readiness decision remains **C. Do not promote** because broader verification, formal-equivalence, and synthesis/PPA evidence are absent. `rv32_core.sv` remains the protected production/reference core.
 
 The scalar decoder, immediate generator, ALU, and register file are in `rtl/core/`. The shared scalar package is `rtl/common/sparrowv_scalar_pkg.sv`. The documented production instruction and trap contract is in `docs/architecture/scalar_core.md`; fetch and memory protocols are in `fetch_frontend.md` and `memory_interface.md`.
 
