@@ -19,9 +19,23 @@
   retirement behavior, result/no-writeback semantics, precise exception,
   reset cancellation, redirect suppression, and payload stability through
   command and completion backpressure.
+- Real-vector targets: `test-vector-regfile`, `test-vector-vadd-directed`,
+  `test-vector-vadd-alias`, `test-vector-vadd-backpressure`,
+  `test-vector-vadd-reset`, and `test-vector-vadd-random`; focused
+  `test-vector-vadd-invalid` checks an unsupported Custom-0 encoding traps
+  precisely without reaching the vector endpoint; aggregate
+  `test-vector-vadd-all` checks a 32x32-bit register file, `v0` writability,
+  four-lane wrapping add, aliases, a dependent chain, wrong-path suppression,
+  command/completion holds, reset cancellation, and 32 deterministic random
+  operations against an independent lane-wise model (seed `0x13579bdf`). The
+  directed program explicitly covers zero, carry/wrap, negative, and mixed
+  lane cases; its test-only vector-write event checks one destination/data
+  matched write per accepted VADD8.
+  `test-vector-regfile` and `test-vector-vadd-alias` intentionally select the
+  corresponding coverage within the shared directed simulation.
 - Aggregate commands: `make test-scalar-regression` runs the directed,
   focused-pipeline, and differential scalar correctness suite; `make
-  test-vector-regression` runs the vector-stub aggregate; and `make
+  test-vector-regression` runs both vector aggregates; and `make
   test-full-regression` combines both with Python tests, lint, repository, and
   documentation checks. The expected-failing throughput experiment is excluded.
 

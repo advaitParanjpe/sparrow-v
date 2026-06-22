@@ -47,8 +47,9 @@ module rv32_core_pipe #(
   rv32_regfile rf(.clk(clk),.rst_n(rst_n),.rs1_addr(if_ins[19:15]),.rs2_addr(if_ins[24:20]),.rs1_data(rf_rs1),.rs2_data(rf_rs2),.we(mw_retire&&mw_we&&!mw_terminal),.rd_addr(mw_rd),.rd_data(mw_y));
   rv32_alu alu(.op(dx_alu_op),.a(dx_a),.b(dx_b),.y(dx_alu_y));
   assign if_lui=if_ins[6:0]==7'h37; assign if_auipc=if_ins[6:0]==7'h17; assign if_opimm=if_ins[6:0]==7'h13; assign if_op=if_ins[6:0]==7'h33;
-  // custom-0 experimental forms: funct3=000 result, 001 vector-only, 010 exception.
-  assign if_vec=(if_ins[6:0]==7'h0b)&&((if_ins[14:12]==3'd0)||(if_ins[14:12]==3'd1)||(if_ins[14:12]==3'd2));
+  // Custom-0 experimental forms: 000=result stub, 001=vector-only stub,
+  // 010=exception stub, 011=VADD8 vector-only engine operation.
+  assign if_vec=(if_ins[6:0]==7'h0b)&&((if_ins[14:12]==3'd0)||(if_ins[14:12]==3'd1)||(if_ins[14:12]==3'd2)||(if_ins[14:12]==3'd3));
   assign if_supported=if_lui||if_auipc||if_opimm||if_op||if_branch||if_jal||if_jalr||if_ecall||(if_mem_op!=MEM_NONE)||(if_result_sel==2'd1)||if_vec;
   assign if_uses_rs1=if_opimm||if_op||if_branch||if_jalr||(if_mem_op!=MEM_NONE)||if_vec; assign if_uses_rs2=if_op||if_branch||(if_mem_op==MEM_STORE)||if_vec;
   assign if_illegal=(!if_legal||!if_supported||if_ebreak)&&!if_vec;

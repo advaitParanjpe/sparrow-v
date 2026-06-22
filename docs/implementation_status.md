@@ -21,13 +21,18 @@
   scalar-result success, vector-only success, and precise exception. Focused
   tests cover command/completion backpressure, one outstanding command,
   reset cancellation, wrong-path suppression, exact-once events, and scalar
-  forward progress. This is not a real vector datapath, vector register file,
-  vector-memory interface, or sparse implementation; the pipe remains
+  forward progress. `rtl/vector/rv32_vec_vadd_engine.sv` now adds a real
+  32x32-bit vector register file and Custom-0 `funct3=011` four-lane wrapping
+  INT8 `VADD8`, committing one vector write only on completion handshake.
+  Directed, alias, command/completion-backpressure, reset, wrong-path, and
+  deterministic 32-operation golden-model tests are available through
+  `make test-vector-vadd-all`; the stub coverage is retained. There is still
+  no vector-memory interface or sparse implementation; the pipe remains
   experimental and `rv32_core.sv` remains production/reference.
 
 ## Planned, not implemented
 
-Vector engine/ISA, vector memory, INT8/INT16 lanes, masks/reductions/dot products, 2:4 sparse metadata, scratchpad, randomized scoreboards, formal verification, compiled bare-metal execution, synthesis, FPGA, and ASIC/OpenLane flows.
+Vector ISA expansion, vector memory, INT16 lanes, masks/reductions/dot products, 2:4 sparse metadata, scratchpad, formal verification, compiled bare-metal execution, synthesis, FPGA, and ASIC/OpenLane flows.
 
 ## Important sources and commands
 

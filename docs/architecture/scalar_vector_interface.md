@@ -7,8 +7,9 @@ experimental integration in `rv32_core_pipe`. It is not a vector ISA.
 `rv32_core.sv` remains unchanged and treats Custom-0 as illegal. The pipe
 implementation recognizes only these test encodings under Custom-0 (`0001011`,
 opcode `0x0b`): `funct3=000` is successful scalar-result stub execution,
-`001` is successful vector-only completion, and `010` is exceptional
-completion. They are experimental test encodings, not final Sparrow-V ISA.
+`001` is successful vector-only completion, `010` is exceptional, and `011`
+is `VADD8` vector-only completion. They are experimental test encodings, not
+the final Sparrow-V ISA.
 
 ## Command channel
 
@@ -22,7 +23,7 @@ reset.
 | Field | Width | v1 meaning |
 | --- | ---: | --- |
 | `vec_cmd_valid`, `vec_cmd_ready` | 1, 1 | Command handshake. |
-| `vec_cmd_op_class` | 4 | Experimental stub operation class. The current pipe maps `funct3` into this field: 0=result, 1=vector-only, 2=exception. |
+| `vec_cmd_op_class` | 4 | Experimental operation class. The current pipe maps `funct3` into this field: 0=result stub, 1=vector-only stub, 2=exception stub, 3=VADD8. |
 | `vec_cmd_funct` | 8 | Opaque function/immediate selector for the later ISA. |
 | `vec_cmd_vs1`, `vec_cmd_vs2`, `vec_cmd_vd` | 5 each | Opaque vector-register indices; their implemented range is deferred. |
 | `vec_cmd_rs1_data`, `vec_cmd_rs2_data` | 32 each | Captured scalar operands. |
@@ -75,7 +76,7 @@ rules discard it.  Reset cancels the outstanding command architecturally:
 the vector engine must clear its active state and suppress any completion; no
 cancellation acknowledgement is needed in v1 because reset is system-wide.
 
-The implemented endpoint is `rtl/vector/rv32_vec_stub_engine.sv`, instantiated
+The adapter-focused endpoint is `rtl/vector/rv32_vec_stub_engine.sv`, instantiated
 with deterministic latency 3 in focused integration tests. It captures only
 the operation class and scalar operands, returns `rs1 + rs2` for class 0,
 returns a result-invalid success for class 1, and returns status `01` with
@@ -86,6 +87,13 @@ interface, or sparse logic. Focused targets are
 `test-scalar-pipe-vec-no-writeback`, `test-scalar-pipe-vec-reset`,
 `test-scalar-pipe-vec-wrong-path`, and aggregate
 `test-scalar-pipe-vec-stub-all`.
+
+The real experimental endpoint is `rtl/vector/rv32_vec_vadd_engine.sv`.
+Custom-0 `funct3=011` maps to operation class 3 and carries `rs1`, `rs2`, and
+`rd` as `vs1`, `vs2`, and `vd`. It returns a result-invalid successful
+completion and commits its vector-register write exactly on completion
+handshake. Its 32x32-bit, four-lane INT8 behavior and test-only debug ports
+are specified in [vector VADD8](vector_vadd8.md).
 
 ## Initial vector-memory boundary: separate vector memory interface
 

@@ -2,6 +2,15 @@
 
 Append completed, human-reviewed milestones below. Pending-review implementation evidence must be explicitly marked and must not imply a commit. Do not reconstruct or invent prior entries.
 
+### Vector Register File and 4-Lane INT8 VADD — implementation complete, pending human review — 2026-06-22
+
+- Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
+- Summary: added a separate real vector endpoint with 32 writable 32-bit registers and Custom-0 `funct3=011` `VADD8`. The operation reads two vector sources, wraps four 8-bit sums, and writes its destination exactly on completion handshake; stub adapter coverage remains unchanged.
+- Key files: `rtl/vector/rv32_vec_vadd_engine.sv`, `rtl/core/rv32_core_pipe.sv`, `tb/integration/tb_vector_vadd.sv`, `Makefile`, and vector/protocol/verification documentation.
+- Tests run and measured results: vector directed/alias/register-file, command and completion backpressure, reset cancellation, and 32-operation deterministic golden-model sequence passed; full final regression evidence is recorded in `.codex/milestone_result.md`.
+- Known limitations: experimental encoding only; no vector memory, INT16, other arithmetic, masks, reductions, sparse metadata, formal verification, or promotion of `rv32_core_pipe`.
+- Follow-up work: human review and commit decision; any vector ISA expansion requires a separate approved milestone.
+
 ### Lean Codex milestone workflow — implementation complete, pending human review — 2026-06-22
 
 - Reference: uncommitted workflow-infrastructure change; no commit or human acceptance yet.
