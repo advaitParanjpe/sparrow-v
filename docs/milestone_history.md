@@ -2,6 +2,15 @@
 
 Append completed, human-reviewed milestones below. Pending-review implementation evidence must be explicitly marked and must not imply a commit. Do not reconstruct or invent prior entries.
 
+### Vector Load/Store and Tightly Coupled Scratchpad — implementation complete, pending human review — 2026-06-22
+
+- Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
+- Summary: added one 256-byte little-endian vector-owned scratchpad and Custom-0 `VLOAD32`/`VSTORE32` (`funct3=101/110`) to the existing sole vector-register owner. Successful vector and memory writes commit only on completion handshake.
+- Key files: `rtl/vector/rv32_vec_vadd_engine.sv`, `rtl/core/rv32_core_pipe.sv`, `tb/integration/tb_vector_vmem.sv`, `Makefile`, and vector architecture/verification documentation.
+- Tests run and measured results: directed sequence reported 8 commands/completions/retirements, 4 vector writes, and 3 scratchpad writes. Random seed `0x1234abcd` reported 24 commands/completions/retirements, 12 vector writes, and 12 scratchpad writes. The focused suite covers stalls, reset, redirect, and misalignment/range errors.
+- Known limitations: vector-only bounded scratchpad; no scalar access, cache, external bus, DMA, unaligned transfer, masks, or pipeline promotion.
+- Follow-up work: human review and commit decision.
+
 ### Signed INT8 Vector Dot Product — implementation complete, pending human review — 2026-06-22
 
 - Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.

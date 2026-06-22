@@ -4,7 +4,7 @@ RTL_SOURCES := $(shell find rtl -name '*.sv' | sort)
 SCALAR_TB := tb/integration/tb_scalar_core.sv
 SIM_BUILD := sim/build
 
-.PHONY: help check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline check-scalar-throughput-experiment test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-cpl-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path test-scalar-pipe-vec-stub-all test-vector-regfile test-vector-vadd-directed test-vector-vadd-alias test-vector-vadd-backpressure test-vector-vadd-reset test-vector-vadd-random test-vector-vadd-invalid test-vector-vadd-all test-vector-vdot-directed test-vector-vdot-backpressure test-vector-vdot-reset test-vector-vdot-redirect test-vector-vdot-random test-vector-vdot-invalid test-vector-vdot-all test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-seed test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative test-scalar-regression test-vector-regression test-full-regression clean
+.PHONY: help check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline check-scalar-throughput-experiment test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-cpl-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path test-scalar-pipe-vec-stub-all test-vector-regfile test-vector-vadd-directed test-vector-vadd-alias test-vector-vadd-backpressure test-vector-vadd-reset test-vector-vadd-random test-vector-vadd-invalid test-vector-vadd-all test-vector-vdot-directed test-vector-vdot-backpressure test-vector-vdot-reset test-vector-vdot-redirect test-vector-vdot-random test-vector-vdot-invalid test-vector-vdot-all test-vector-scratchpad test-vector-vmem-directed test-vector-vmem-backpressure test-vector-vmem-reset test-vector-vmem-redirect test-vector-vmem-errors test-vector-vmem-random test-vector-vmem-all test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-seed test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative test-scalar-regression test-vector-regression test-full-regression clean
 
 help:
 	@printf '%s\n' \
@@ -145,6 +145,31 @@ test-vector-vdot-invalid:
 	$(SIM_BUILD)/tb_vector_vdot_invalid.vvp
 test-vector-vdot-all: test-vector-vdot-directed test-vector-vdot-backpressure test-vector-vdot-reset test-vector-vdot-redirect test-vector-vdot-random test-vector-vdot-invalid
 
+VEC_VMEM_TB := tb/integration/tb_vector_vmem.sv
+test-vector-vmem-directed:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_vector_vmem -Ptb_vector_vmem.MODE=0 -o $(SIM_BUILD)/tb_vector_vmem.vvp $(VEC_VADD_RTL) $(VEC_VMEM_TB)
+	$(SIM_BUILD)/tb_vector_vmem.vvp
+test-vector-scratchpad: test-vector-vmem-directed
+test-vector-vmem-backpressure:
+	@mkdir -p $(SIM_BUILD)
+	@for mode in 1 2; do iverilog -g2012 -s tb_vector_vmem -Ptb_vector_vmem.MODE=$$mode -o $(SIM_BUILD)/tb_vector_vmem_$$mode.vvp $(VEC_VADD_RTL) $(VEC_VMEM_TB) && $(SIM_BUILD)/tb_vector_vmem_$$mode.vvp || exit $$?; done
+test-vector-vmem-reset:
+	@mkdir -p $(SIM_BUILD)
+	@for mode in 3 8 9; do iverilog -g2012 -s tb_vector_vmem -Ptb_vector_vmem.MODE=$$mode -o $(SIM_BUILD)/tb_vector_vmem_reset_$$mode.vvp $(VEC_VADD_RTL) $(VEC_VMEM_TB) && $(SIM_BUILD)/tb_vector_vmem_reset_$$mode.vvp || exit $$?; done
+test-vector-vmem-random:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_vector_vmem -Ptb_vector_vmem.MODE=4 -o $(SIM_BUILD)/tb_vector_vmem_random.vvp $(VEC_VADD_RTL) $(VEC_VMEM_TB)
+	$(SIM_BUILD)/tb_vector_vmem_random.vvp
+test-vector-vmem-errors:
+	@mkdir -p $(SIM_BUILD)
+	@for mode in 5 7 10 11 12; do iverilog -g2012 -s tb_vector_vmem -Ptb_vector_vmem.MODE=$$mode -o $(SIM_BUILD)/tb_vector_vmem_errors_$$mode.vvp $(VEC_VADD_RTL) $(VEC_VMEM_TB) && $(SIM_BUILD)/tb_vector_vmem_errors_$$mode.vvp || exit $$?; done
+test-vector-vmem-redirect:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_vector_vmem -Ptb_vector_vmem.MODE=6 -o $(SIM_BUILD)/tb_vector_vmem_redirect.vvp $(VEC_VADD_RTL) $(VEC_VMEM_TB)
+	$(SIM_BUILD)/tb_vector_vmem_redirect.vvp
+test-vector-vmem-all: test-vector-scratchpad test-vector-vmem-directed test-vector-vmem-backpressure test-vector-vmem-reset test-vector-vmem-redirect test-vector-vmem-errors test-vector-vmem-random
+
 DIFF_TB := tb/integration/tb_scalar_differential.sv
 DIFF_RTL := rtl/common/sparrowv_scalar_pkg.sv rtl/core/rv32_alu.sv rtl/core/rv32_decoder.sv rtl/core/rv32_immediate.sv rtl/core/rv32_regfile.sv rtl/core/rv32_core.sv rtl/core/rv32_core_pipe.sv
 SEED ?= 1
@@ -212,7 +237,7 @@ test-scalar-diff-redirect-backpressure:
 # Final scalar correctness suite. Excludes the known expected-fail throughput experiment.
 test-scalar-regression: test-repo test-scalar-directed test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative
 
-test-vector-regression: test-scalar-pipe-vec-stub-all test-vector-vadd-all test-vector-vdot-all
+test-vector-regression: test-scalar-pipe-vec-stub-all test-vector-vadd-all test-vector-vdot-all test-vector-vmem-all
 
 # One final acceptance command after a milestone is stable.
 test-full-regression: test-scalar-regression test-vector-regression lint check docs-check

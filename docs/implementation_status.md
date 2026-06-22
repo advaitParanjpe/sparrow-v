@@ -36,12 +36,21 @@
   `make test-vector-vdot-all` covers signed extremes, x0, dependent scalar
   use, command/completion backpressure, reset, redirect suppression, invalid
   encoding, and 32 deterministic golden-model cases (seed `0x2468ace1`).
+- Experimental vector memory is implemented in that same owner: a 256-byte
+  little-endian scratchpad and Custom-0 `VLOAD32`/`VSTORE32` (`funct3=101/110`).
+  Addressing is scalar base plus signed 12-bit offset; aligned words from 0 to
+  252 succeed, and misalignment/range-or-wrap complete precisely with causes
+  16/17. Loads and stores commit only at successful completion handshake.
+  `make test-vector-vmem-all` covers directed ordering/dependencies, command
+  and completion backpressure, reset, redirect, misalignment, and a 24-case
+  deterministic golden-model sequence (seed `0x1234abcd`).
 
 ## Planned, not implemented
 
-Vector ISA expansion, vector memory, INT16 lanes, masks, configurable
-reductions beyond fixed VDOT8, 2:4 sparse metadata, scratchpad, formal
-verification, compiled bare-metal execution, synthesis, FPGA, and ASIC/OpenLane flows.
+Vector ISA expansion, INT16 lanes, masks, configurable reductions beyond fixed
+VDOT8, scratchpad banking, external memory interfaces, DMA, vector lengths
+beyond 32 bits, gather/scatter, 2:4 sparse metadata, formal verification,
+compiled bare-metal execution, synthesis, FPGA, and ASIC/OpenLane flows.
 
 ## Important sources and commands
 

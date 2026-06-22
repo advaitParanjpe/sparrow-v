@@ -8,7 +8,8 @@ experimental integration in `rv32_core_pipe`. It is not a vector ISA.
 implementation recognizes only these test encodings under Custom-0 (`0001011`,
 opcode `0x0b`): `funct3=000` is successful scalar-result stub execution,
 `001` is successful vector-only completion, `010` is exceptional, `011` is
-`VADD8` vector-only completion, and `100` is `VDOT8` scalar-result completion.
+`VADD8` vector-only completion, `100` is `VDOT8` scalar-result completion,
+`101` is `VLOAD32`, and `110` is `VSTORE32`.
 They are experimental test encodings, not
 the final Sparrow-V ISA.
 
@@ -98,26 +99,22 @@ destination, returns a result-valid successful completion, and never writes
 vector state. Its four-lane INT8 behavior and test-only debug ports are
 specified in [vector VADD8](vector_vadd8.md).
 
-## Initial vector-memory boundary: separate vector memory interface
+## Implemented vector scratchpad boundary
 
-Choose a separate vector-memory interface owned by the vector engine and
-connected by a future top-level memory/scratchpad owner.  It is not the scalar
-`dmem` port and is not scratchpad RTL.  This isolates scalar request timing,
-avoids a new scalar-port arbiter, permits later banked-scratchpad arbitration,
-and gives vector exceptions a single owner.  A shared scalar port is simpler
-in wires but couples scalar protocol/backpressure to vector verification;
-dedicated scratchpad RTL prematurely fixes capacity/banking; opaque external
-load/store commands obscure ownership and ordering.
+`rv32_vec_vadd_engine` now owns the sole 256-byte vector scratchpad as well as
+the sole vector register file. It is not connected to scalar `dmem`. `VLOAD32`
+uses I-type Custom-0 fields: `rd=vd`, `rs1=scalar base`, and signed
+`imm[11:0]=instr[31:20]`. `VSTORE32` uses S-type fields: `rs2=vs`,
+`rs1=scalar base`, and signed `imm={instr[31:25],instr[11:7]}`. Both use
+`effective_address = rs1_data + sign_extended_imm`.
 
-The future interface uses the same decoupled shape: `vec_mem_req_valid/ready`,
-`write`, 32-bit byte `addr`, 32-bit `wdata`, 4-bit little-endian `wstrb`, and
-`vec_mem_resp_valid/ready` with 32-bit `rdata`.  The vector engine owns request
-formation and may have at most one memory transaction outstanding in v1.  The
-future top-level owner is responsible for mapping, error response, and any
-later arbitration with a scratchpad.  Reset cancels outstanding vector-memory
-work; an error produces a non-success vector completion.  Initial blocking
-means scalar and vector memory do not overlap architecturally; a later
-nonblocking change requires a new ordering/arbiter ADR.
+Only aligned byte addresses `0x00000000` through `0x000000fc` succeed; bytes
+are little-endian. Read data is captured at command acceptance after the
+fixed latency, while a load register write and store byte write both commit
+only with successful completion handshake. Reset clears pending work without
+either write. Misalignment completes exceptionally with cause 16; range or
+32-bit arithmetic wrap completes exceptionally with cause 17. The bounded
+`dbg_spad_*` ports initialize and observe aligned words for testbench use only.
 
 ## State boundary and deferrals
 

@@ -48,8 +48,8 @@ module rv32_core_pipe #(
   rv32_alu alu(.op(dx_alu_op),.a(dx_a),.b(dx_b),.y(dx_alu_y));
   assign if_lui=if_ins[6:0]==7'h37; assign if_auipc=if_ins[6:0]==7'h17; assign if_opimm=if_ins[6:0]==7'h13; assign if_op=if_ins[6:0]==7'h33;
   // Custom-0 experimental forms: 000=result stub, 001=vector-only stub,
-  // 010=exception stub, 011=VADD8 vector-only operation, 100=VDOT8.
-  assign if_vec=(if_ins[6:0]==7'h0b)&&((if_ins[14:12]==3'd0)||(if_ins[14:12]==3'd1)||(if_ins[14:12]==3'd2)||(if_ins[14:12]==3'd3)||(if_ins[14:12]==3'd4));
+  // 010=exception stub, 011=VADD8, 100=VDOT8, 101=VLOAD32, 110=VSTORE32.
+  assign if_vec=(if_ins[6:0]==7'h0b)&&((if_ins[14:12]==3'd0)||(if_ins[14:12]==3'd1)||(if_ins[14:12]==3'd2)||(if_ins[14:12]==3'd3)||(if_ins[14:12]==3'd4)||(if_ins[14:12]==3'd5)||(if_ins[14:12]==3'd6));
   assign if_supported=if_lui||if_auipc||if_opimm||if_op||if_branch||if_jal||if_jalr||if_ecall||(if_mem_op!=MEM_NONE)||(if_result_sel==2'd1)||if_vec;
   assign if_uses_rs1=if_opimm||if_op||if_branch||if_jalr||(if_mem_op!=MEM_NONE)||if_vec; assign if_uses_rs2=if_op||if_branch||(if_mem_op==MEM_STORE)||if_vec;
   assign if_illegal=(!if_legal||!if_supported||if_ebreak)&&!if_vec;
@@ -86,7 +86,9 @@ module rv32_core_pipe #(
   // Operand values were captured at IF/DX admission with same-edge MW bypass.
   // Do not recompute them while command-ready applies backpressure.
   assign vec_cmd_rs1_data=vec_cmd_rs1_q; assign vec_cmd_rs2_data=vec_cmd_rs2_q;
-  assign vec_cmd_rs1_valid=1'b1; assign vec_cmd_rs2_valid=1'b1; assign vec_cmd_rd=dx_rd; assign vec_cmd_rd_we=(dx_vec_funct3==3'd0)||(dx_vec_funct3==3'd4); assign vec_cmd_imm={{20{dx_ins[31]}},dx_ins[31:20]}; assign vec_cmd_pc=dx_pc; assign vec_cmd_id=1'b0;
+  assign vec_cmd_rs1_valid=1'b1; assign vec_cmd_rs2_valid=1'b1; assign vec_cmd_rd=dx_rd; assign vec_cmd_rd_we=(dx_vec_funct3==3'd0)||(dx_vec_funct3==3'd4);
+  // VLOAD32 uses I-type immediate; VSTORE32 uses S-type immediate.
+  assign vec_cmd_imm=(dx_vec_funct3==3'd6)?{{20{dx_ins[31]}},dx_ins[31:25],dx_ins[11:7]}:{{20{dx_ins[31]}},dx_ins[31:20]}; assign vec_cmd_pc=dx_pc; assign vec_cmd_id=1'b0;
   assign vec_cmd_fire=vec_cmd_valid&&vec_cmd_ready;
   assign vec_cpl_ready=vec_outstanding&&!mw_v&&!trap_valid&&(vec_cpl_stall_count>=VEC_CPL_READY_STALL);
   assign vec_cpl_fire=vec_cpl_valid&&vec_cpl_ready;

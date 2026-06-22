@@ -41,6 +41,14 @@
   zero, signs, `-128 * -128`, `127 * 127`, cancellation, source alias, v0,
   v31, x0 destination, a dependent ADDI, and consecutive dots. The random
   model runs 32 cases with seed `0x2468ace1`.
+- Vector-memory targets: `test-vector-scratchpad`, `test-vector-vmem-directed`,
+  `test-vector-vmem-backpressure`, `test-vector-vmem-reset`,
+  `test-vector-vmem-redirect`, `test-vector-vmem-errors`, and
+  `test-vector-vmem-random`; `test-vector-vmem-all` aggregates them. They
+  verify little-endian scratchpad words, signed offsets, v0/v31, exact
+  load/store commit event accounting, load-to-VADD8/VDOT8 dependencies,
+  stalls, reset/redirect cancellation, misalignment, and a 24-operation
+  deterministic golden model using seed `0x1234abcd`.
 - Aggregate commands: `make test-scalar-regression` runs the directed,
   focused-pipeline, and differential scalar correctness suite; `make
   test-vector-regression` runs both vector aggregates; and `make

@@ -14,7 +14,7 @@ module tb_vector_vdot #(parameter integer MODE=0);
   rv32_core_pipe #(.VEC_CPL_READY_STALL(MODE==2?5:0)) dut(.*);
   rv32_vec_vadd_engine #(.LATENCY(3)) engine(.clk,.rst_n,.vec_cmd_valid(vec_cmd_valid&&allow_cmd),.vec_cmd_ready(eng_cmd_ready),.vec_cmd_op_class,.vec_cmd_vs1,.vec_cmd_vs2,.vec_cmd_vd,.vec_cmd_id,.vec_cpl_ready(eng_cpl_ready),.vec_cpl_valid(eng_cpl_valid),.vec_cpl_id,.vec_cpl_status,.vec_cpl_result_valid,.vec_cpl_result_data,.vec_cpl_exception_cause,.busy(),.dbg_we,.dbg_waddr,.dbg_wdata,.dbg_raddr,.dbg_rdata,.dbg_vreg_write_valid,.dbg_vreg_write_addr,.dbg_vreg_write_data);
   function automatic [31:0] vdot(input integer rs2,input integer rs1,input integer rd); vdot={7'h00,rs2[4:0],rs1[4:0],3'd4,rd[4:0],7'h0b}; endfunction
-  function automatic [31:0] bad(input integer rs2,input integer rs1,input integer rd); bad={7'h00,rs2[4:0],rs1[4:0],3'd5,rd[4:0],7'h0b}; endfunction
+  function automatic [31:0] bad(input integer rs2,input integer rs1,input integer rd); bad={7'h00,rs2[4:0],rs1[4:0],3'd7,rd[4:0],7'h0b}; endfunction
   function automatic [31:0] addi(input integer rd,input integer rs1,input integer imm); addi={imm[11:0],rs1[4:0],3'd0,rd[4:0],7'h13}; endfunction
   function automatic [31:0] jal(input integer off); jal={{11{off[20]}},off[20],off[10:1],off[11],off[19:12],5'd0,7'h6f}; endfunction
   function automatic signed [31:0] model_dot(input [31:0] a,input [31:0] b);
