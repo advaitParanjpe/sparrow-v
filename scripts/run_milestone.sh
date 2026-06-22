@@ -8,7 +8,9 @@ RESULT_FILE=.codex/milestone_result.md
 required=(AGENTS.md docs/codex_context.md docs/current_milestone.md docs/codex_milestone_prompt.md)
 
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
-if [[ -z "$repo_root" || "$PWD" != "$repo_root" || ! -f Makefile ]]; then
+current_dir_identity=$(stat -f '%d:%i' . 2>/dev/null || true)
+repo_root_identity=$(stat -f '%d:%i' "$repo_root" 2>/dev/null || true)
+if [[ -z "$repo_root" || -z "$current_dir_identity" || "$current_dir_identity" != "$repo_root_identity" || ! -f Makefile ]]; then
   echo "error: run this script from the Sparrow-V repository root" >&2
   exit 2
 fi
