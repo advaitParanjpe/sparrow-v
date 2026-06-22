@@ -26,18 +26,44 @@ if [[ -n $(git status --porcelain) ]]; then
 fi
 
 mkdir -p .codex
-rm -f "$RESULT_FILE"
+started_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+printf 'STATUS: IN_PROGRESS\nMILESTONE: %s\nSTARTED_AT: %s\n\n' "${title:-unknown}" "$started_at" >"$RESULT_FILE"
+
+handle_interrupt() {
+  local signal=$1
+  local interrupted_at
+  interrupted_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  printf 'INTERRUPTED_AT: %s\nINTERRUPTION_SIGNAL: %s\n' "$interrupted_at" "$signal" >>"$RESULT_FILE"
+  echo "warning: milestone run interrupted by $signal; leaving $RESULT_FILE IN_PROGRESS" >&2
+  exit 130
+}
+trap 'handle_interrupt INT' INT
+trap 'handle_interrupt TERM' TERM
+
 prompt=$(<docs/codex_milestone_prompt.md)
 
 set +e
+cd "$repo_root"
 "$CODEX_BIN" "${CODEX_ARGS[@]}" "$prompt"
 codex_status=$?
 set -e
 
-if [[ -f "$RESULT_FILE" ]]; then
-  echo "Codex result file: $RESULT_FILE"
-  sed -n '1,240p' "$RESULT_FILE"
-else
-  echo "warning: Codex produced no $RESULT_FILE; inspect its terminal output and Git diff" >&2
+if [[ ! -f "$RESULT_FILE" ]]; then
+  echo "error: internal launcher error: Codex result file is absent: $RESULT_FILE" >&2
+  exit "$codex_status"
 fi
+
+status=$(sed -n 's/^STATUS: \([^[:space:]]*\).*$/\1/p' "$RESULT_FILE" | head -n 1)
+case "$status" in
+  COMPLETE|BLOCKED|FAILED)
+    echo "Codex result file: $RESULT_FILE"
+    sed -n '1,240p' "$RESULT_FILE"
+    ;;
+  IN_PROGRESS)
+    echo "warning: Codex exited or was interrupted before finalizing $RESULT_FILE" >&2
+    ;;
+  *)
+    echo "warning: Codex result file has missing or unrecognized status: ${status:-missing}" >&2
+    ;;
+esac
 exit "$codex_status"
