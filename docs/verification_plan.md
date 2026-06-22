@@ -18,6 +18,14 @@ A milestone is complete only when every applicable available command named in `d
 
 Randomized instruction generation, scoreboards, coverage closure, formal/property checking, vector/sparse golden-model comparison, compiler-built bare-metal regressions, synthesis/timing/area flows, FPGA builds, and ASIC/OpenLane evaluation.
 
+## Production-readiness campaign evidence
+
+At clean commit `5850b69813207055f1f1c7c1eebcb5dd63bda14b`, all Phase-1 commands in `current_milestone.md` passed, including focused pipeline, differential, controlled-negative, lint, and repository checks. Immediate differential seeds 1–500 passed in 18.4 seconds using `make test-scalar-diff-seed SEED=<n> MODE=0`; the testbench has a 4,000-cycle per-run timeout. Seeds 1–16 passed in modes 1 (request backpressure), 2 (delayed response), and 3 (mixed); seed 17 passed modes 0–3. Exact rerun is `make test-scalar-diff-seed SEED=17 MODE=<0|1|2|3>`.
+
+`make check-scalar-throughput-experiment` was run separately and failed as expected (exit 2): 52 cycles, 16 retired instructions, maximum consecutive retirements 1, and 16 gaps. It remains non-blocking and supports no throughput claim.
+
+Human review approved the resulting architecture decisions: `rv32_core` remains the production/reference core; `rv32_core_pipe` remains experimental because its store-retirement trace contract is incomplete; and the blocking one-command scalar-to-vector protocol is an approved RTL-independent v1 specification. No vector RTL has been implemented.
+
 ## Milestone regression guidance
 
 Use targeted checks while editing, then run the complete milestone regression, inspect the full diff, repair concrete defects, update implementation status, and report exact command output. Do not claim unavailable planned checks have run.

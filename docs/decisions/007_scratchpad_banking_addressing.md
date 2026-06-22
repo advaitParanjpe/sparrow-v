@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted — boundary selection only; scratchpad details proposed.
 
 ## Context
 
@@ -16,7 +16,7 @@ The proposed scratchpad has four 32-bit word-interleaved banks with one request 
 
 ## Decision
 
-Not decided. Freeze capacity, address map, access latency, byte/halfword behavior, scalar/vector arbitration, conflict/replay ordering, and counter definitions before Phase 5.
+The first vector integration uses a separate vector memory interface owned by the vector engine, as specified in `architecture/scalar_vector_interface.md`. It is not the scalar data port and does not implement a scratchpad. Freeze capacity, address map, access latency, byte/halfword behavior, scalar/vector arbitration, conflict/replay ordering, and counter definitions before Phase 5.
 
 ## Consequences
 

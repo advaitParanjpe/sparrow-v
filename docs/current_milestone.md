@@ -2,7 +2,7 @@
 
 ## Status
 
-Approved architecture, audit, specification, and decision milestone. This milestone does not implement vector RTL, alter scalar RTL, rename modules, delete files, change build behavior, or promote a core before the evidence and human-review conditions below are met. `rtl/core/rv32_core.sv` remains the protected production/reference scalar core at milestone entry; `rtl/core/rv32_core_pipe.sv` remains experimental at milestone entry.
+Completed architecture, audit, specification, and decision milestone. Human review approved the recorded decisions: `rtl/core/rv32_core.sv` remains the protected production/reference scalar core, `rtl/core/rv32_core_pipe.sv` remains experimental, and the v1 scalar-to-vector boundary is approved as an RTL-independent specification. This milestone did not implement vector RTL, alter scalar RTL, rename modules, delete files, change build behavior, commit, or push.
 
 ## Objective
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted — ownership boundary only.
 
 ## Context
 
@@ -16,7 +16,7 @@ The charter proposes eight 128-bit registers, a mask register, and optional vect
 
 ## Decision
 
-Not decided. Preserve a dedicated vector register file; freeze count, width, length range, mask state, reset state, and tail/masked-off write policy before dense-vector RTL.
+Vector state is owned exclusively by the vector engine and is independent of the scalar register file. Command fields carry opaque vector-register indices only. Count, width, length range, mask state, architectural reset value, and tail/masked-off policy remain deferred before dense-vector RTL.
 
 ## Consequences
 

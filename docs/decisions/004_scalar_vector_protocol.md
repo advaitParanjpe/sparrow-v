@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted — v1 boundary, no RTL.
 
 ## Context
 
@@ -15,12 +15,12 @@ The plans permit a blocking first implementation and defer decoupled issue. The 
 
 ## Decision
 
-Not decided. The planned minimum is blocking, subject to an accepted definition of accepted issue, completion, scalar result writeback, backpressure, illegal instruction, and reset-cancellation behavior.
+Adopt the one-outstanding blocking valid/ready command and completion protocol in `docs/architecture/scalar_vector_interface.md`. Acceptance, completion, writeback, precise exceptions, backpressure, and reset cancellation are defined there. It is an RTL-independent boundary, not a vector ISA.
 
 ## Consequences
 
-Blocking minimizes Phase 3 state and verification. Decoupling needs tags, destination tracking, fences, and more ordering assertions.
+Blocking minimizes Phase 3 state and verification. Decoupling needs tags, destination tracking, fences, and more ordering assertions. The v1 fixed-zero identity field reserves a later tagged extension without adding unneeded machinery.
 
 ## Unresolved questions
 
-Can vector-only instructions complete without a scalar writeback, and what exact event retires a vector instruction?
+Detailed operation encodings, cause allocation, and any nonblocking revision.
