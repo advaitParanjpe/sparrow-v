@@ -1,22 +1,26 @@
-# Milestone: 2:4 Sparse Signed INT8 Dot Product
+# Milestone: Bare-Metal Sparse Kernel and Scalar vs Dense vs Sparse Evaluation
 
 ## Objective
 
-Implement Sparrow-V’s defining sparse-compute operation:
+Demonstrate Sparrow-V as a working sparse-aware processor by running one complete quantized inference-style kernel in three implementations:
 
-```text
-VSDOT8 rd, va, vw, pattern
-```
+1. scalar RV32I;
+2. dense vector using `VDOT8`;
+3. 2:4 sparse vector using `VSDOT8`.
 
-`VSDOT8` performs a signed INT8 dot product using:
+All three implementations must produce identical signed 32-bit outputs for the same deterministic workload.
 
-- one four-lane activation vector;
-- two compressed nonzero INT8 weights;
-- 3-bit metadata selecting two active activation lanes from a group of four;
-- two signed multiplications instead of four;
-- signed 32-bit scalar accumulation and writeback.
+The milestone must measure:
 
-The milestone must demonstrate functional equivalence with the existing dense `VDOT8` operation while directly measuring executed and skipped multiplications.
+- total cycles;
+- retired instructions;
+- dense and sparse dot-product instruction counts;
+- multiplications executed;
+- multiplications skipped;
+- weight-storage bytes;
+- vector scratchpad activity where observable.
+
+This milestone should use the existing hardware rather than add major new RTL features.
 
 ## Baseline
 
@@ -24,15 +28,15 @@ The repository currently contains:
 
 - `rtl/core/rv32_core.sv` as the unchanged scalar reference core;
 - `rtl/core/rv32_core_pipe.sv` as the experimental scalar/vector integration core;
-- a blocking, in-order, one-command-outstanding scalar/vector protocol;
-- one shared 32 × 32-bit vector register file;
-- four little-endian INT8 lanes per vector register;
+- one shared vector-register file;
 - `VADD8`;
-- signed dense `VDOT8`;
-- one 256-byte byte-addressed vector scratchpad;
+- dense signed `VDOT8`;
+- compressed 2:4 signed `VSDOT8`;
+- multiplication-executed and multiplication-skipped accounting;
+- a 256-byte vector scratchpad;
 - aligned `VLOAD32` and `VSTORE32`;
-- precise completion, retirement, scalar writeback, reset cancellation, redirect suppression, and error handling;
-- canonical vector and full-regression targets.
+- precise completion, retirement, exceptions, reset cancellation, and wrong-path suppression;
+- deterministic scalar, vector, memory, and sparse regressions.
 
 ## Relevant Context
 
@@ -44,568 +48,456 @@ Read:
 - `docs/architecture/scalar_vector_interface.md`
 - `docs/architecture/vector_vadd8.md`
 - `docs/architecture/vector_memory.md`
-- `docs/decisions/004_scalar_vector_protocol.md`
+- the sparse-execution architecture document;
 - `rtl/core/rv32_core_pipe.sv`
 - `rtl/vector/rv32_vec_vadd_engine.sv`
-- `tb/integration/tb_vector_vdot.sv`
-- `tb/integration/tb_vector_vmem.sv`
-- relevant vector Makefile targets.
+- the existing integration testbenches;
+- relevant Makefile and simulation scripts.
 
-Read additional files only when required by a concrete implementation or verification issue.
+Read additional files only when a concrete implementation need requires them.
 
-## Sparse Data Representation
+## Workload
 
-Use a compressed two-weight representation.
-
-For:
+Implement one deterministic quantized fully connected layer:
 
 ```text
-VSDOT8 rd, va, vw, pattern
+y[j] = bias[j] + Σ x[k] × w[j][k]
 ```
 
-- `va` contains four signed INT8 activation lanes.
-- `vw[7:0]` contains compressed nonzero weight 0.
-- `vw[15:8]` contains compressed nonzero weight 1.
-- `vw[31:16]` is reserved for this milestone and must not affect the result.
-- `pattern` selects the two activation lanes receiving those weights.
+Use this initial bounded configuration:
 
-For selected lane pair `{i, j}`:
+- 16 signed INT8 input features;
+- 4 output neurons;
+- 4 groups of 4 weights per output;
+- signed INT32 accumulation;
+- deterministic fixed input vector;
+- deterministic fixed dense weights;
+- deterministic 2:4-pruned sparse weights;
+- deterministic biases.
 
-```text
-result =
-    signed(va[i]) * signed(vw[7:0]) +
-    signed(va[j]) * signed(vw[15:8])
-```
+The dense and sparse forms must represent equivalent mathematical weights.
 
-The first compressed weight always maps to the lower-numbered selected lane and the second compressed weight maps to the higher-numbered selected lane.
+For every 4-weight group in the sparse form:
 
-Document this ordering explicitly.
+- exactly two weights are nonzero;
+- two compressed INT8 weights are stored;
+- one 3-bit metadata value selects their activation lanes;
+- sparse execution uses `VSDOT8`.
 
-## Valid Metadata Patterns
+Do not increase the workload size unless the initial configuration is clearly too small to produce meaningful measurements.
 
-Use six legal 2-of-4 patterns:
+## Three Implementations
 
-| Pattern value | Selected activation lanes |
-|---|---|
-| `3'b000` | `{0,1}` |
-| `3'b001` | `{0,2}` |
-| `3'b010` | `{0,3}` |
-| `3'b011` | `{1,2}` |
-| `3'b100` | `{1,3}` |
-| `3'b101` | `{2,3}` |
+### 1. Scalar RV32I kernel
 
-Reserve:
-
-- `3'b110`
-- `3'b111`
-
-as invalid metadata encodings.
-
-Invalid metadata must complete through the existing precise exception path and must not produce scalar or vector architectural writes.
-
-## In Scope
-
-### Sparse dot-product operation
-
-Implement one experimental operation:
-
-```text
-VSDOT8 rd, va, vw, pattern
-```
+Implement the layer using supported scalar instructions only.
 
 Requirements:
 
-- two explicitly signed INT8 activation values;
-- two explicitly signed INT8 compressed weights;
-- two signed multiplications;
-- each product represented with sufficient signed width;
-- exact signed 32-bit accumulation;
-- scalar completion result;
-- one scalar destination register;
-- no vector-register write;
-- no scratchpad write;
-- exactly one successful retirement;
-- precise exception for invalid metadata.
+- signed INT8 values must be represented and sign-extended correctly;
+- multiplication may use an existing supported scalar multiply path if available;
+- if scalar multiply is not implemented, use a bounded software multiply routine;
+- accumulation must be signed INT32;
+- outputs must be stored in a known result region;
+- no custom vector instructions may be used.
 
-### Existing architectural state
+Document exactly how scalar multiplication is implemented.
 
-Reuse:
+### 2. Dense vector kernel
 
-- the existing shared vector register file;
-- the existing scalar/vector command-completion interface;
-- the existing vector execution owner.
+Implement the same layer using:
 
-Do not create:
+- `VLOAD32` for activation and dense-weight groups;
+- `VDOT8` for four-lane signed dot products;
+- scalar accumulation of partial dot products and bias;
+- existing scalar instructions for loop/control and result storage.
 
-- a second vector-register array;
-- a second architectural vector engine with copied state;
-- a second scratchpad.
+Requirements:
 
-### Experimental encoding
+- four dense dot-product groups per output neuron;
+- no `VSDOT8`;
+- outputs identical to the scalar kernel.
 
-Continue using Custom-0 opcode `0x0b`.
+### 3. Sparse vector kernel
 
-Assign an unused operation encoding for `VSDOT8`.
+Implement the same layer using:
 
-The encoding must carry:
+- `VLOAD32` for activation groups;
+- `VLOAD32` for compressed two-weight groups;
+- `VSDOT8` with 2:4 metadata;
+- scalar accumulation of partial sparse dot products and bias;
+- existing scalar instructions for loop/control and result storage.
 
-- activation vector index;
-- compressed-weight vector index;
-- scalar destination register;
-- 3-bit pattern metadata;
-- issuing PC;
-- scalar-result writeback intent.
+Requirements:
 
-Prefer to use existing instruction fields cleanly:
+- four sparse dot-product groups per output neuron;
+- exactly two multiplications executed and two skipped per sparse group;
+- outputs identical to the scalar and dense kernels.
 
-- `rs1` field for `va`;
-- `rs2` field for `vw`;
-- `rd` field for scalar destination;
-- unused function or immediate bits for the 3-bit pattern.
+## Program Representation
 
-The exact field mapping must be documented.
+Provide a minimal bare-metal program-generation path.
 
-Do not conflict with existing operations:
+Preferred implementation:
 
-- adapter stub operations;
-- `VADD8`;
-- `VDOT8`;
-- `VLOAD32`;
-- `VSTORE32`.
+- a small Python instruction encoder or assembler helper;
+- deterministic generation of instruction-memory and data-memory images;
+- helpers for standard RV32I instructions used by the workload;
+- helpers for `VLOAD32`, `VSTORE32`, `VDOT8`, and `VSDOT8`;
+- no dependency on a full custom compiler backend.
 
-Unsupported operation encodings must remain precise illegal instructions.
+The generator must:
 
-## Dense Equivalence Model
+- produce reproducible program images;
+- validate immediate and register-field ranges;
+- fail clearly on unsupported instructions;
+- document the custom-instruction encodings it emits.
 
-For every legal sparse input, construct an equivalent dense four-lane weight vector:
+Do not hardcode raw instruction words throughout the testbench when a small reusable encoder would be clearer.
 
-- unselected lanes contain zero;
-- the first compressed weight is placed in the lower-numbered selected lane;
-- the second compressed weight is placed in the higher-numbered selected lane.
+## Data Layout
 
-The sparse result must equal:
+Define and document a deterministic layout for:
+
+- input activations;
+- dense weights;
+- compressed sparse weights;
+- sparse metadata;
+- biases;
+- scalar outputs;
+- dense-vector outputs;
+- sparse-vector outputs.
+
+The vector scratchpad is only 256 bytes, so confirm the proposed layout fits.
+
+If all three datasets cannot coexist in the scratchpad simultaneously, use separate deterministic runs or reload phases rather than enlarging the memory without review.
+
+Document:
+
+- byte offsets;
+- word organization;
+- lane ordering;
+- compressed-weight ordering;
+- metadata association;
+- output locations.
+
+## Golden Model
+
+Add an independent Python golden model.
+
+It must compute:
+
+- scalar dense outputs;
+- equivalent dense-vector outputs;
+- sparse compressed outputs;
+- expected multiplication counts;
+- expected skipped counts;
+- dense and sparse weight-storage sizes.
+
+The model must verify:
 
 ```text
-VDOT8(activation, equivalent_dense_weight)
+scalar_output == dense_vector_output == sparse_vector_output
 ```
 
-The testbench golden model must independently construct this equivalent dense vector.
+for all four output neurons.
 
-Do not implement sparse correctness by merely calling the same RTL helper used for dense execution.
+Do not derive expected sparse results from RTL helper code.
 
-## Arithmetic Requirements
+## End-to-End Simulation Harness
 
-Use deliberate SystemVerilog signed conversions.
+Add an integration-level test that:
 
-For each selected lane:
+1. loads the generated program image;
+2. initializes required scalar memory and vector scratchpad state;
+3. runs until completion, trap, or timeout;
+4. captures output values;
+5. compares outputs against the Python-generated expected values;
+6. records performance and activity metrics;
+7. fails on any mismatch or unexpected trap.
 
-- activation is signed 8-bit;
-- compressed weight is signed 8-bit;
-- product is signed and at least 16 bits;
-- products are sign-extended before 32-bit addition.
+Use the actual scalar/vector pipeline path.
 
-Required directed values include:
+Do not bypass instruction execution by directly calling vector modules.
 
+## Completion Signalling
+
+Use one deterministic program-completion mechanism.
+
+Preferred options:
+
+- write a known signature to a monitored scalar-memory address;
+- execute an existing terminal instruction convention;
+- use another already established integration-test completion mechanism.
+
+The harness must distinguish:
+
+- successful completion;
+- timeout;
+- unexpected trap;
+- output mismatch.
+
+## Performance Counters
+
+Provide measured or testbench-observed counters for each kernel.
+
+At minimum record:
+
+- total cycles from program start to completion;
+- retired instruction count;
+- scalar multiply operations or software-multiply invocations;
+- `VDOT8` instructions retired;
+- `VSDOT8` instructions retired;
+- multiplications executed;
+- multiplications skipped;
+- vector loads;
+- vector stores;
+- scratchpad writes where observable.
+
+Counters may be implemented in the testbench if they are derived from real retirement and debug events.
+
+Do not add architectural CSRs solely for this milestone unless the existing design already has a suitable counter interface.
+
+## Weight-Storage Accounting
+
+Report exact weight-storage bytes.
+
+For the workload:
+
+### Dense form
+
+Count:
+
+- all 16 INT8 weights per output;
+- total across 4 outputs.
+
+### Sparse form
+
+Count:
+
+- two compressed INT8 weights per 4-weight group;
+- metadata storage;
+- total across 4 outputs.
+
+Be explicit about metadata packing assumptions.
+
+Report both:
+
+- raw weight bytes;
+- weight plus metadata bytes.
+
+Do not claim a 50% total-storage reduction if metadata overhead makes the measured reduction smaller.
+
+## Required Measurements
+
+Produce one comparison table:
+
+| Metric | Scalar RV32I | Dense Vector | Sparse Vector |
+|---|---:|---:|---:|
+| Correct outputs | | | |
+| Total cycles | | | |
+| Retired instructions | | | |
+| Scalar multiply operations | | | |
+| Dense dot-product instructions | | | |
+| Sparse dot-product instructions | | | |
+| Multiplications executed | | | |
+| Multiplications skipped | | | |
+| Vector loads | | | |
+| Vector stores | | | |
+| Weight bytes | | | |
+| Metadata bytes | | | |
+| Weight + metadata bytes | | | |
+
+Every value must be measured or deterministically derived and clearly labelled.
+
+## Correctness Requirements
+
+All three kernels must:
+
+- produce exactly four signed INT32 outputs;
+- match the independent Python golden model;
+- use identical input values and equivalent mathematical weights;
+- include bias exactly once;
+- use correct signed INT8 interpretation;
+- avoid overflow beyond signed INT32 for the chosen dataset;
+- complete without unexpected trap;
+- terminate within a bounded timeout.
+
+The sparse kernel must additionally prove:
+
+- every group obeys 2:4 structure;
+- metadata matches the compressed-weight order;
+- sparse output equals the equivalent dense output;
+- executed multiplication count equals 2 per sparse group;
+- skipped multiplication count equals 2 per sparse group.
+
+## Directed Workload Cases
+
+The primary workload must include a mixture of:
+
+- positive activations;
+- negative activations;
 - zero activations;
-- zero compressed weights;
-- positive × positive;
-- positive × negative;
-- negative × positive;
-- negative × negative;
-- `-128 × -128`;
-- `127 × 127`;
-- cancellation to zero;
-- mixed-sign result;
-- maximum and minimum meaningful two-product cases;
-- identical activation and weight vector indices;
-- `v0` and `v31`.
+- positive weights;
+- negative weights;
+- zero weights;
+- at least one `-128` value where mathematically safe;
+- at least one `127` value;
+- cancellation across groups;
+- nonzero biases;
+- positive and negative final outputs where practical.
 
-## Compute Accounting
+Keep all expected outputs within signed 32-bit range.
 
-Expose or maintain direct event accounting for sparse compute.
+## Determinism
 
-For every successful `VSDOT8`:
+All generated images, inputs, weights, metadata, expected outputs, and measurements must be reproducible.
 
-- executed multiplication count increases by exactly 2;
-- skipped multiplication count increases by exactly 2.
+Use:
 
-The accounting may be:
+- a fixed seed if data is generated;
+- checked-in deterministic configuration;
+- stable program ordering;
+- stable timeout;
+- stable measurement definitions.
 
-- per-operation debug outputs;
-- cumulative debug counters;
-- another bounded test-only mechanism.
+Report the seed if one is used.
 
-Requirements:
+## Assertions and Sanity Checks
 
-- counters/events update exactly once per successful operation;
-- no update before architectural completion;
-- no update for invalid metadata;
-- no update for reset-cancelled operations;
-- no update for wrong-path instructions;
-- no update for dense `VDOT8`, unless dense accounting is deliberately added and separately documented.
+Add checks for:
 
-Prefer a test-only debug mechanism over a new architectural CSR in this milestone.
-
-## Dense Baseline Comparison
-
-Provide direct test evidence comparing sparse and dense behavior.
-
-For each of the six legal metadata patterns:
-
-1. Initialize one activation vector.
-2. Initialize compressed sparse weights.
-3. Build the equivalent dense weight vector.
-4. Execute dense `VDOT8`.
-5. Execute sparse `VSDOT8`.
-6. Require identical scalar results.
-7. Require dense conceptual multiply count of 4.
-8. Require sparse executed count of 2.
-9. Require sparse skipped count of 2.
-
-The dense conceptual multiply count may be represented in the testbench if the dense RTL has no hardware counter.
-
-The sparse hardware counts must be observed directly.
-
-## Completion and Scalar Writeback
-
-For a valid `VSDOT8`:
-
-- completion status indicates success;
-- completion result-valid is asserted;
-- completion result contains the signed 32-bit sparse dot product;
-- scalar `rd` is written once when `rd != x0`;
-- `rd == x0` produces no scalar architectural write but still completes and retires;
-- no vector-register write occurs;
-- no scratchpad write occurs;
-- successful retirement occurs exactly once.
-
-Completion backpressure must preserve:
-
-- result data;
-- result-valid;
-- status;
-- cause;
-- command ID;
-- scalar destination metadata.
-
-No scalar writeback, retirement, or compute-counter update may occur before completion handshake.
-
-## Invalid Metadata Behavior
-
-For patterns `3'b110` and `3'b111`:
-
-- command may be accepted normally;
-- completion must report a documented exception cause;
-- issuing PC must be preserved;
-- no scalar writeback;
-- no vector-register write;
-- no scratchpad write;
-- no compute-counter update;
-- exactly one trap;
-- zero successful retirement.
-
-Use a dedicated experimental cause or the existing vector-operation error convention, and document it.
-
-Do not silently remap invalid patterns.
-
-## Reset Behavior
-
-Verify reset:
-
-- after sparse command acceptance;
-- during execution;
-- while completion is valid but backpressured.
-
-For cancelled operations require:
-
-- no stale completion;
-- no scalar writeback;
-- no successful retirement;
-- no vector-register write;
-- no scratchpad write;
-- no executed/skipped counter update.
-
-A fresh post-reset `VSDOT8` must complete normally.
-
-## Wrong-Path Suppression
-
-Include a taken redirect containing a wrong-path `VSDOT8`.
-
-Verify:
-
-- zero command handshake attributable to the killed instruction;
-- zero completion;
-- zero scalar writeback;
-- zero successful retirement;
-- zero vector-register write;
-- zero scratchpad write;
-- zero compute-counter update;
-- target-path execution continues correctly.
-
-Track the wrong-path instruction by PC and destination where practical.
-
-## Ordering and Dependencies
-
-Cover:
-
-```text
-VSDOT8 x5, va, vw, pattern
-ADDI   x6, x5, 1
-```
-
-The scalar consumer must immediately follow the sparse dot product in program order and observe the completed result.
-
-Also cover:
-
-- two consecutive sparse dot products;
-- sparse followed by dense dot product;
-- dense followed by sparse dot product;
-- sparse operation after vector loads populate `va` and `vw`.
+- program image bounds;
+- scratchpad layout bounds;
+- valid sparse metadata;
+- exactly two nonzero weights per sparse group;
+- dense/sparse mathematical equivalence before simulation;
+- no unexpected vector-register or scratchpad writes;
+- no sparse compute accounting for dense execution;
+- expected sparse accounting for sparse execution;
+- no unexpected exception;
+- exactly one completion signature;
+- no output write before the relevant computation completes.
 
 ## Existing Feature Preservation
 
-Preserve all behavior and regressions for:
+Preserve all current regressions for:
 
-- scalar/vector adapter stub;
+- scalar directed and differential verification;
+- scalar/vector adapter;
 - `VADD8`;
 - dense `VDOT8`;
-- `VLOAD32`;
-- `VSTORE32`;
-- scratchpad errors and commit semantics;
-- reset cancellation;
-- redirect suppression;
-- scalar reference-core behavior.
+- `VLOAD32` and `VSTORE32`;
+- vector scratchpad;
+- `VSDOT8`;
+- reset, backpressure, redirect, and exception behavior.
+
+Do not weaken or replace the existing focused tests.
 
 ## Out of Scope
 
 Do not implement:
 
-- more than one 2:4 group per instruction;
-- vectors wider than 32 bits;
-- general N:M sparsity;
+- a C compiler backend;
+- GCC or LLVM changes;
+- a full assembler;
+- an operating system;
+- interrupts;
+- caches;
+- external DRAM;
+- DMA;
+- convolution;
+- multiple neural-network layers;
+- activation functions beyond what is already trivial in scalar code;
+- floating point;
+- training;
 - automatic pruning;
-- sparse vector loads or stores;
-- packed metadata in scratchpad memory;
-- multiple sparse groups per register;
-- persistent accumulators;
-- vector result from sparse multiply;
-- masks or predicates;
-- INT16 sparse arithmetic;
-- saturation or rounding;
-- compiler, assembler, intrinsics, or model exporter;
-- multiple outstanding commands;
-- speculative or out-of-order execution;
-- performance optimization;
-- FPGA or ASIC implementation;
+- quantization-aware training;
+- configurable vector length;
+- vectors wider than 32 bits;
+- additional ISA operations unless strictly necessary and approved;
+- FPGA or ASIC optimization;
+- power estimates without a measured flow;
 - changes to `rtl/core/rv32_core.sv`.
 
 ## Focused Development Tests
 
-### Pattern coverage
+Add focused tests for:
 
-Test all six legal patterns explicitly.
+### Program encoder
 
-For every pattern verify:
+- known scalar instruction encodings;
+- `VLOAD32`;
+- `VSTORE32`;
+- `VDOT8`;
+- `VSDOT8`;
+- positive and negative immediates;
+- rejection of invalid register, immediate, and metadata values.
 
-- correct lane selection;
-- correct compressed-weight ordering;
-- correct sparse result;
-- equality with equivalent dense result;
-- exactly two executed multiplications;
-- exactly two skipped multiplications.
+### Golden model
 
-### Invalid metadata
+- scalar/dense/sparse equality;
+- sparse metadata reconstruction;
+- storage-byte calculations;
+- multiplication-count calculations.
 
-Test both invalid patterns:
+### End-to-end scalar kernel
 
-- `3'b110`;
-- `3'b111`.
+- program completion;
+- four correct outputs;
+- no custom vector instruction retirement;
+- stable cycle and retirement counts.
 
-Verify exact exception cause, PC, and zero architectural updates.
+### End-to-end dense-vector kernel
 
-### Directed arithmetic
+- program completion;
+- four correct outputs;
+- expected `VDOT8` count;
+- zero `VSDOT8` count;
+- correct multiplication count.
 
-Cover:
+### End-to-end sparse-vector kernel
 
-- all zeros;
-- one zero compressed weight;
-- both zero compressed weights;
-- positive values;
-- negative values;
-- mixed signs;
-- `-128`;
-- `127`;
-- cancellation;
-- identical `va` and `vw` indices;
-- `v0`;
-- `v31`;
-- `rd == x0`.
+- program completion;
+- four correct outputs;
+- expected `VSDOT8` count;
+- exact executed/skipped multiplication counts;
+- compressed storage accounting.
 
-### Backpressure
+### Cross-kernel comparison
 
-Command backpressure:
-
-- hold ready low for a fixed number of cycles;
-- verify complete sparse command payload stability;
-- verify no completion or architectural event before acceptance;
-- accept once.
-
-Completion backpressure:
-
-- hold completion ready low;
-- verify complete completion payload stability;
-- verify no scalar writeback, retirement, or compute-accounting update before handshake;
-- commit once after readiness rises.
-
-### Reset
-
-Cover:
-
-- reset while sparse operation is executing;
-- reset while sparse completion is stalled;
-- fresh post-reset operation.
-
-### Redirect
-
-Cover:
-
-- wrong-path sparse instruction;
-- valid target-path sparse instruction.
-
-### Dependency and mixed execution
-
-Cover:
-
-- immediate dependent scalar ADDI;
-- consecutive sparse operations;
-- dense/sparse result comparison;
-- sparse execution using activation and compressed weights loaded from scratchpad.
-
-### Deterministic randomized equivalence
-
-Use an independent testbench golden model.
-
-Randomize:
-
-- all four activation lanes;
-- both compressed weights;
-- all six valid patterns;
-- activation and weight vector indices;
-- scalar destination, including occasional x0;
-- positive, negative, zero, and extreme lane values.
-
-For each case:
-
-- construct equivalent dense weight vector;
-- compare sparse golden result with dense golden result;
-- execute `VSDOT8`;
-- compare completion and scalar architectural result;
-- verify zero vector and scratchpad writes;
-- verify executed count 2 and skipped count 2.
-
-Use a fixed reported seed and at least 96 deterministic randomized cases, unless runtime becomes unreasonable. A smaller count requires documented justification.
-
-## Event Accounting
-
-Track directly:
-
-- command handshakes;
-- completion handshakes;
-- successful sparse retirements;
-- scalar writeback events;
-- vector-register writes;
-- scratchpad writes;
-- traps;
-- executed multiplications;
-- skipped multiplications.
-
-For successful non-x0 `VSDOT8`:
-
-```text
-commands = 1
-completions = 1
-successful retirements = 1
-scalar writes = 1
-vector writes = 0
-scratchpad writes = 0
-traps = 0
-executed multiplications = 2
-skipped multiplications = 2
-```
-
-For successful `rd == x0`:
-
-```text
-commands = 1
-completions = 1
-successful retirements = 1
-scalar writes = 0
-vector writes = 0
-scratchpad writes = 0
-traps = 0
-executed multiplications = 2
-skipped multiplications = 2
-```
-
-For invalid, reset-cancelled, or wrong-path operations, require zero compute-accounting and architectural write events.
-
-## Assertions
-
-Add or preserve meaningful assertions for:
-
-- no second command while busy;
-- command payload stability under backpressure;
-- completion payload stability under backpressure;
-- no completion without an accepted command;
-- valid metadata selects exactly two distinct lanes;
-- invalid metadata produces no architectural update;
-- no vector-register write for `VSDOT8`;
-- no scratchpad write for `VSDOT8`;
-- scalar result-valid is asserted for successful `VSDOT8`;
-- no scalar writeback before completion handshake;
-- exactly two executed and two skipped multiplications per successful operation;
-- no compute-accounting update before completion handshake;
-- no compute-accounting update after reset cancellation;
-- destination and pattern metadata remain stable while pending;
-- at most one scalar architectural write per command;
-- no duplicate completion or retirement.
-
-Avoid tautological assertions.
+- identical outputs;
+- all required metrics present;
+- no unlabelled or fabricated measurements.
 
 ## Canonical Targets
 
 Add targets following repository conventions, including equivalents of:
 
 ```text
-test-vector-vsdot-patterns
-test-vector-vsdot-directed
-test-vector-vsdot-backpressure
-test-vector-vsdot-reset
-test-vector-vsdot-redirect
-test-vector-vsdot-invalid
-test-vector-vsdot-random
-test-vector-vsdot-all
+test-workload-encoder
+test-workload-golden
+test-workload-scalar
+test-workload-dense
+test-workload-sparse
+test-workload-compare
+test-workload-all
 ```
 
-Exact names may be adjusted to match existing conventions.
+Update `test-vector-regression` only if the new workload test is sufficiently bounded.
 
-Update `test-vector-regression` to include:
+A larger workload comparison may instead be included only in `test-full-regression` or a dedicated workload regression target.
 
-- adapter/stub coverage;
-- VADD8;
-- dense VDOT8;
-- vector memory;
-- sparse VSDOT8.
-
-Focused sparse tests must not duplicate the full scalar regression.
+Avoid making every focused RTL edit rerun the full end-to-end workload.
 
 ## Final Acceptance Regression
 
-During development, run focused sparse tests only.
+During development, run only the relevant encoder, golden-model, and kernel tests.
 
 After implementation is stable, run once:
 
 ```text
+make test-workload-all
 make test-vector-regression
 make test-full-regression
 make lint
@@ -618,111 +510,103 @@ git diff --check
 
 The milestone is complete only when:
 
-1. One `VSDOT8` instruction exists.
-2. It uses one four-lane activation vector.
-3. It uses two compressed INT8 weights.
-4. It supports all six legal 2-of-4 patterns.
-5. It rejects both invalid metadata patterns precisely.
-6. The first compressed weight maps to the lower selected lane.
-7. The second compressed weight maps to the higher selected lane.
-8. Exactly two signed INT8 multiplications execute.
-9. Exactly two dense-equivalent multiplications are skipped.
-10. Products use sufficient signed width.
-11. Accumulation produces an exact signed 32-bit result.
-12. Sparse results equal equivalent dense `VDOT8` results.
-13. The existing shared vector-register file is reused.
-14. No vector-register write occurs.
-15. No scratchpad write occurs.
-16. Scalar completion writeback is correct.
-17. `rd == x0` completes without modifying x0.
-18. Exactly one command is accepted.
-19. Exactly one completion is accepted.
-20. Exactly one successful retirement occurs.
-21. Exactly one scalar write occurs for successful non-x0 operations.
-22. Compute accounting updates exactly once on successful completion.
-23. Command backpressure preserves the full payload.
-24. Completion backpressure causes no early write or accounting update.
-25. Reset cancels execution and stalled completion without stale effects.
-26. Wrong-path sparse instructions produce no architectural or accounting effects.
-27. Immediate scalar dependency works.
-28. Consecutive sparse operations work.
-29. Dense-to-sparse and sparse-to-dense ordering works.
-30. Scratchpad-loaded inputs work.
-31. All six valid patterns pass directed dense-equivalence tests.
-32. Both invalid patterns pass precise exception tests.
-33. Deterministic randomized equivalence testing passes.
-34. Existing adapter, VADD8, VDOT8, vector-memory, and scalar regressions pass.
-35. Documentation matches the implementation.
-36. No wider vectors, general sparsity, sparse memory format, compiler support, masks, or INT16 logic is added.
-37. `rtl/core/rv32_core.sv` remains unchanged.
-38. Codex creates no commit or push.
-39. `.codex/milestone_result.md` is written in compact format.
+1. A deterministic fully connected workload exists.
+2. It has 16 signed INT8 inputs and 4 outputs.
+3. It includes equivalent dense and 2:4 sparse weights.
+4. A Python golden model computes all expected outputs.
+5. Scalar RV32I execution produces the expected outputs.
+6. Dense-vector execution produces the expected outputs.
+7. Sparse-vector execution produces the expected outputs.
+8. All three output vectors are identical.
+9. Bias is included correctly.
+10. A reusable program encoder exists.
+11. Custom vector instruction encodings are generated programmatically.
+12. Program and data layouts are documented.
+13. The layout fits existing memories or uses clearly separated runs.
+14. End-to-end execution uses the actual pipeline.
+15. Completion and timeout behavior are deterministic.
+16. Total cycles are measured for each kernel.
+17. Retired instructions are measured for each kernel.
+18. Dense `VDOT8` retirements are counted.
+19. Sparse `VSDOT8` retirements are counted.
+20. Sparse executed multiplications are counted.
+21. Sparse skipped multiplications are counted.
+22. Dense conceptual or measured multiplications are reported.
+23. Scalar multiply work is reported honestly.
+24. Dense weight-storage bytes are reported.
+25. Sparse compressed-weight bytes are reported.
+26. Metadata bytes are reported.
+27. Combined sparse storage is reported.
+28. Every sparse group has exactly two nonzero weights.
+29. Sparse metadata reconstructs the equivalent dense weights.
+30. No unexpected trap occurs.
+31. No output mismatch occurs.
+32. Existing scalar/vector regressions remain passing.
+33. Documentation includes the final comparison table.
+34. Claims distinguish measured values from derived values.
+35. No compiler backend, OS, cache, DMA, wider vector, or unrelated ISA work is added.
+36. `rtl/core/rv32_core.sv` remains unchanged.
+37. Codex creates no commit or push.
+38. `.codex/milestone_result.md` is finalized in compact format.
 
 ## Stop Conditions
 
 Stop for human review only if:
 
-- the current command payload cannot represent two vector indices, scalar destination, and 3-bit pattern;
-- no unused experimental encoding is available;
-- preserving one vector-register owner requires a major redesign;
-- compute accounting requires architectural CSRs rather than bounded debug visibility;
-- precise invalid-metadata exceptions conflict with the existing completion protocol;
-- scalar writeback requires broad pipeline restructuring;
-- multiple outstanding commands become necessary;
-- a likely pre-existing scalar, vector, or memory correctness bug is discovered.
+- the scalar ISA cannot execute the workload without a major new instruction;
+- the program cannot access required scalar or vector data without broad memory redesign;
+- the 256-byte scratchpad cannot support even separated deterministic runs;
+- end-to-end completion cannot be detected using existing integration mechanisms;
+- cycle or retirement measurement requires invasive architectural redesign;
+- dense and sparse kernels cannot be represented with the existing instruction encodings;
+- a likely existing CPU/vector correctness bug is discovered;
+- the milestone would require a compiler backend or external memory system.
 
-Ordinary metadata decode bugs, signedness errors, counter bugs, test failures, and documentation work are not stop conditions.
+Ordinary encoder bugs, testbench bugs, data-layout changes, program-generation issues, and documentation work are not stop conditions.
 
 ## Required Documentation
 
 Update only materially affected files, normally:
 
-- `docs/architecture/scalar_vector_interface.md`;
-- a new sparse-execution architecture document;
-- existing vector execution documentation where needed;
+- a new workload and evaluation document;
 - `docs/implementation_status.md`;
 - `docs/verification_plan.md`;
 - `docs/milestone_history.md`;
-- README only if stable user-facing commands change.
+- README if stable commands or headline results are added.
 
 Document:
 
-- exact `VSDOT8` encoding;
-- compressed-weight layout;
-- all six metadata patterns;
-- invalid patterns;
-- lane-to-weight ordering;
-- signed arithmetic widths;
-- scalar result behavior;
-- compute-accounting semantics;
-- reset and wrong-path behavior;
-- dense-equivalence methodology;
-- random seed and case count;
-- remaining limitations.
+- workload dimensions;
+- deterministic input, weights, sparsity, and biases;
+- program-generation method;
+- scalar multiply method;
+- scratchpad and memory layout;
+- dense and sparse kernel structure;
+- golden-model methodology;
+- completion detection;
+- measurement definitions;
+- final comparison table;
+- storage accounting;
+- limitations and non-claims.
 
-Do not claim general sparse-vector support or complete 2:4 workload support beyond one four-lane group.
+Do not claim general ML inference, compiler support, or energy efficiency.
 
 ## Result File
 
-Write `.codex/milestone_result.md` using the compact repository format.
+Update `.codex/milestone_result.md` throughout the run.
 
-Include:
+Finalize it with:
 
-- completion status;
-- architecture chosen;
-- exact encoding;
-- metadata mapping;
-- compressed-weight representation;
-- signed arithmetic widths;
-- scalar writeback behavior;
-- multiplication executed/skipped accounting;
-- all six legal-pattern results;
-- both invalid-pattern results;
-- randomized seed and case count;
-- focused and final regression commands;
+- `STATUS: COMPLETE`, `STATUS: BLOCKED`, or `STATUS: FAILED`;
+- workload dimensions;
+- generator and golden-model summary;
+- exact output values;
+- scalar, dense, and sparse metrics;
+- multiplication and storage accounting;
+- focused and final test commands;
 - changed files;
 - bugs fixed;
 - remaining limitations;
-- confirmation that dense VDOT8 and vector memory remain passing;
+- confirmation that existing sparse/vector tests remain passing;
 - confirmation that `rtl/core/rv32_core.sv` is unchanged;
 - confirmation that no commit or push occurred.
