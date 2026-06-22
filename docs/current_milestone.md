@@ -1,170 +1,165 @@
-# Repair and verify `rv32_core_pipe` store-retirement trace outputs
+# Implement and verify the minimal scalar-to-vector command/completion adapter with a stub vector engine
 
 ## Status
 
-Implementation complete, pending human review and commit. `rtl/core/rv32_core.sv` remains the protected production/reference scalar implementation. `rtl/core/rv32_core_pipe.sv` remains experimental. This milestone repaired and verified only the pipeline store-retirement trace contract; it did not promote, rename, replace, or otherwise integrate either core.
+Approved bounded experimental-integration milestone. `rtl/core/rv32_core.sv` remains the protected production/reference scalar core and must not change. `rtl/core/rv32_core_pipe.sv` remains experimental and is the only scalar integration candidate in scope. This milestone implements the approved v1 command/completion boundary with a stub engine; it does not implement a real vector architecture or promote the pipeline.
 
 ## Objective
 
-Make `rv32_core_pipe` contract-compatible with the frozen v1 scalar retirement interface by accurately reporting retired store instructions through `retire_mem_we`, `retire_mem_addr`, `retire_mem_data`, and `retire_mem_wstrb`, while preserving all existing scalar behavior.
+Implement a minimal scalar-to-vector integration path and deterministic stub vector engine that exercise the approved blocking, in-order, one-command-outstanding protocol. Prove that a custom instruction decodes to a decoupled command, blocks scalar progress after acceptance, completes exactly once with either a scalar result or a precise exception, and behaves correctly under reset and both command/completion backpressure.
 
-At milestone entry, the pipeline continuously drove all four fields to zero. The reference core emits a one-cycle store-retirement event when the outstanding store's data-memory response handshakes. It reports the effective byte address, unshifted scalar store operand, and the request's little-endian lane strobe. The repaired pipeline now matches that architectural event and representation; matching port names or accepted store requests alone remains insufficient evidence.
+The result is experimental integration evidence, not a final Sparrow-V vector ISA, vector datapath, vector-register implementation, vector-memory system, or basis for scalar-core promotion.
 
-## Entry baseline and audit requirements
+## Entry architecture and audit
 
-Before editing RTL or tests, read `AGENTS.md`, `README.md`, `docs/architecture.md`, `docs/architecture/scalar_interface_freeze.md`, `docs/architecture/scalar_production_readiness.md`, `docs/implementation_status.md`, `docs/verification_plan.md`, `docs/milestone_history.md`, this document, relevant ADRs (at minimum ADR-012 and ADR-013), both core implementations, current retirement declarations/assignments, memory and differential testbenches, and `Makefile`. Read any nested `AGENTS.md` files.
+Before implementation read `AGENTS.md`, `README.md`, `docs/architecture.md`, `docs/architecture/scalar_vector_interface.md`, `docs/architecture/scalar_interface_freeze.md`, `docs/architecture/scalar_production_readiness.md`, `docs/implementation_status.md`, `docs/verification_plan.md`, `docs/milestone_history.md`, this document, and relevant ADRs including ADR-003, ADR-004, ADR-005, ADR-008, ADR-012, and ADR-013. Audit `rv32_core_pipe`, decoder/package/register file/trap/retirement logic, focused pipeline testbenches, Makefile targets, and applicable scripts. Read nested `AGENTS.md` files if present.
 
-Inspect recent Git history and record a clean `git status --short`, commit identifier, tool versions, exact commands, exit status, and wall time. Treat the RTL, the frozen interface specification, and directly run tests as the source of truth.
+Record a clean `git status --short`, commit identifier, tool versions, exact commands, exit status, and wall time. Determine and document:
 
-The audit must establish and document:
+- custom-0 (`0001011`) reservation and current illegal-instruction behavior;
+- the chosen minimal instruction encoding/field extraction without claiming a full ISA;
+- command fields, scalar source capture, destination metadata, fixed ID, and completion fields already specified by `scalar_vector_interface.md`;
+- current MW blocking, retirement, terminal trap, reset, redirect, and scalar memory behavior;
+- where accepted command state and completion enter the pipeline; and
+- whether direct pipeline integration or a wrapper is the smallest compatible design.
 
-- the reference store retirement event: accepted data response, not request acceptance;
-- the reference representation: effective byte `retire_mem_addr`, unshifted `retire_mem_data`, and lane-positioned `retire_mem_wstrb` for SB/SH/SW;
-- store request/response behavior under request backpressure and response delay;
-- exact-once retirement behavior and absence of register-write retirement for stores;
-- suppression of faulting, killed, stale, wrong-path, and younger-after-terminal-trap stores;
-- reset and redirect interaction with store retirement.
-
-Do not infer any of these rules only from signal names. The frozen v1 interface requires a response handshake for store retirement even if an existing pipeline-oriented memory model currently completes writes at request acceptance; that model must be brought into contract-compatible verification during implementation rather than redefining the scalar interface.
+The implementation must choose and document one approach. Direct integration may add clearly marked experimental vector ports only to `rv32_core_pipe` while preserving all existing scalar ports and leaving the frozen `rv32_core` interface untouched. A wrapper is acceptable only if it does not duplicate or bypass scalar decode, retirement, trap, or ordering behavior. Stop for human review if neither choice is possible without a material external-interface or broad-control redesign.
 
 ## In scope
 
-- `retire_mem_we`, `retire_mem_addr`, `retire_mem_data`, and `retire_mem_wstrb` in `rv32_core_pipe`.
-- SB, SH, and SW, including byte offsets 0/1/2/3 and halfword offsets 0/2.
-- Exact-once store retirement, request backpressure, response delay, mixed timing, branches/redirects, traps, and reset.
-- A focused pipeline store-retirement regression and direct normalized differential comparison against `rv32_core`.
-- Deterministic exact-seed reproduction, controlled negative detection, factual documentation updates, and a promotion recommendation after evidence exists.
+- One initial custom-0 stub-success instruction and one stub-exception instruction, or an equivalently minimal documented pair.
+- Vector-command decode, decoupled `vec_cmd_valid/ready`, command payload, PC, scalar source capture, optional scalar destination metadata, fixed command ID, and one-outstanding state.
+- Decoupled `vec_cpl_valid/ready`, completion status/result/cause, precise success retirement, precise exception trap, reset cancellation, and command/completion backpressure.
+- A standalone deterministic stub engine with busy state and configurable bounded latency.
+- Focused adapter/stub testbenches, assertions, canonical Make targets, scalar-regression preservation, and factual documentation.
 
 ## Out of scope
 
-- Vector RTL, scalar-to-vector adapter RTL, vector memory RTL, scratchpad/cache work, compiler/runtime work, new ISA instructions, formal-equivalence claims, FPGA/ASIC implementation, throughput redesign, or a broad pipeline redesign.
-- Production promotion, module/file renaming, deletion, replacement of `rv32_core`, or automatic change to the human-approved C (do not promote) decision.
+- Vector register file, vector ALU, multiply/dot/reduction/mask datapath, vector loads/stores, vector memory interface implementation, scratchpad/cache, sparse metadata/2:4 execution, compiler/assembler support, FPGA/ASIC work, performance optimization, or a full vector ISA.
+- Production promotion or renaming of `rv32_core_pipe`, changes to `rv32_core`, broad pipeline redesign, multiple outstanding commands, speculative issue, out-of-order completion, or a claim of formal equivalence.
 
-## Architectural constraints
+## Initial experimental instruction behavior
 
-- Frozen external scalar interfaces and the v1 retirement contract remain unchanged.
-- A store retirement event must coincide with the same architectural completion event as the reference core: completion of the sole outstanding data transaction by response handshake, not merely request acceptance.
-- Each retired store emits one and only one cycle with `retire_valid=1`, `retire_mem_we=1`, and the reference-equivalent address, data, and strobe fields.
-- `retire_mem_addr` is the effective byte address; it is not the word-aligned data-port address.
-- `retire_mem_data` is the unshifted scalar store operand; `retire_mem_wstrb` is lane-positioned little-endian byte enable data: SB selects one lane, SH selects lanes 0/1 or 2/3, and SW selects all lanes.
-- A store held before request acceptance does not retire early; a held request and a delayed response cannot produce duplicate retirement.
-- Faulting/misaligned, killed/stale/wrong-path, and younger-after-terminal-trap stores emit no request side effect and no store-retirement event.
-- Stores do not invent `retire_rd_we` or a scalar register write. Cycle timing may differ between implementations, but normalized architectural retirement may not.
-- `rv32_core.sv` remains unchanged unless a reproducible reference-core defect and explicit human approval require otherwise.
+Use custom-0 only, consistent with ADR-003. During implementation document exact bit fields and add a decoder table/test helper. The initial behavior must be intentionally minimal and explicitly non-ISA-final:
 
-## Focused directed verification
+| Instruction class | Required behavior |
+| --- | --- |
+| Stub success | Accept normal command operands/metadata; after deterministic latency complete successfully with a simple documented scalar result (for example `rs1 + rs2`, pass-through, or another fixed transformation); optionally write `rd`; retire once. |
+| Stub exception | Accept normally; after deterministic latency complete with a documented non-success cause; write no scalar result; trap precisely at the issuing PC. |
 
-Add a self-checking focused pipeline testbench, preferably `tb/integration/tb_scalar_pipe_store_retire.sv`, and canonical target to add:
+The implementation must not expose the operation as an architectural vector arithmetic promise beyond this test-only integration boundary.
+
+## Command protocol requirements
+
+- A command transfers only on `vec_cmd_valid && vec_cmd_ready`; every payload field remains stable while valid is held without ready.
+- The accepted command captures operation class/funct, opaque vector indices when present, scalar source data/valid bits, scalar `rd`/write-enable intent, immediate payload, issuing PC, and fixed-zero v1 ID.
+- No second command may be accepted while one command is outstanding; a killed/wrong-path instruction issues no command; scalar stalls cannot duplicate command transfer.
+- Reset clears command/outstanding state and prevents acceptance during reset.
+- `vec_cmd_ready` backpressure is supported for arbitrary finite time and is low while the stub/adapter has an outstanding command.
+
+## Completion protocol requirements
+
+- A completion transfers only on `vec_cpl_valid && vec_cpl_ready`; all fields remain stable while valid is held without ready.
+- Completion includes fixed-zero ID, success/exception/illegal status, optional result-valid/data, and exception cause. The adapter rejects or asserts on a completion without a matching outstanding command.
+- Success writes the captured scalar destination only if completion result-valid, command write-enable, and `rd != 0`; a vector-only form must retire without fabricated scalar writeback.
+- Exception writes no scalar destination, traps exactly once at the captured issuing PC with the documented cause, and cannot retire as success.
+- Completion is accepted exactly once; no stale completion is accepted after reset.
+
+## Scalar ordering, stall, retirement, and trap semantics
+
+- Scalar issue is in order, non-speculative, and blocks after command acceptance until completion acceptance.
+- All older scalar work completes before command acceptance. No younger scalar instruction may retire, write state, or issue a vector command while the command is active.
+- A successful vector instruction retires exactly on accepted successful completion through the existing scalar retirement bundle: `retire_valid=1`, its issuing PC/instruction, optional scalar writeback, no memory retirement side effect, and one `instret_count` increment.
+- A vector exception enters the existing terminal precise trap path at captured command PC, emits one trap retirement event, writes no scalar destination, and prevents younger architectural effects.
+- Scalar fetch/decode may only resume after the success or trap handling leaves no outstanding vector work. Normal scalar instructions and existing memory/redirect behavior must remain unaffected.
+
+## Stub vector engine requirements
+
+Implement a small standalone stub module, not a vector execution unit. It must provide command-ready backpressure, captured command state, parameterized/configurable deterministic latency, a busy indication/internal counter if useful to verification, success and exception completion generation, completion-valid holding under `vec_cpl_ready` backpressure, and reset cancellation. It must contain no vector register state, vector ALU/MAC, vector memory port, scratchpad logic, sparse metadata, or lane datapath.
+
+## Assertions
+
+Add assertions that prove or check:
+
+- command payload stability under command backpressure;
+- completion payload stability under completion backpressure;
+- no second command while outstanding/busy;
+- no completion without outstanding command and matching fixed ID;
+- no simultaneous successful scalar writeback and exception;
+- no duplicate command, completion, or retirement;
+- no younger retirement while blocked; and
+- reset clears adapter/stub outstanding state and suppresses stale completion.
+
+## Focused verification
+
+Add self-checking focused tests for:
+
+- immediate command acceptance and deterministic multi-cycle completion;
+- prolonged command backpressure and command-payload stability;
+- prolonged completion backpressure and completion-payload stability;
+- successful scalar writeback, vector-only/no-`rd` writeback, and exactly-once success retirement;
+- one-outstanding enforcement and no duplicate command/completion/retirement;
+- stub-exception cause and exact issuing-PC trap with no writeback;
+- no younger scalar retirement before completion; scalar instruction before and after completion;
+- taken branch around a vector instruction and wrong-path vector instruction suppression;
+- reset while idle and reset while command/completion is outstanding, with no stale completion afterward; and
+- preservation of all ordinary scalar behavior.
+
+## Canonical targets to add
+
+Use repository naming conventions and add real, self-checking targets:
 
 | Purpose | Target to add |
 | --- | --- |
-| Focused pipeline store-retirement contract regression | `test-scalar-pipe-store-retire` |
+| Focused adapter/stub success and ordering regression | `test-scalar-pipe-vec-stub` |
+| Command-ready backpressure/payload-stability regression | `test-scalar-pipe-vec-cmd-stall` |
+| Completion-ready backpressure/payload-stability regression | `test-scalar-pipe-vec-cpl-stall` |
+| Precise stub-exception regression | `test-scalar-pipe-vec-exception` |
+| Aggregate adapter/stub regression | `test-scalar-pipe-vec-stub-all` |
 
-The focused regression must directly observe the pipeline retirement outputs and prove:
-
-- SB at offsets 0, 1, 2, and 3; SH at offsets 0 and 2; and SW;
-- effective retired address, unshifted retired data, and correct lane strobe for every case;
-- exactly one retirement pulse per accepted/completed store and no register-write retirement;
-- no retirement before request acceptance or before the required response completion;
-- correct behavior with request backpressure, delayed response, and mixed stall/delay timing;
-- consecutive and mixed-width consecutive stores;
-- stores before and after a taken branch, plus wrong-path store suppression;
-- misaligned SH/SW with no request or retirement event;
-- terminal trap suppression of younger store retirement; and
-- reset with no stale retirement event.
-
-The test must check architectural effects and event count, not merely final memory or terminal completion.
-
-## Differential store-retirement verification
-
-Extend `tb/integration/tb_scalar_differential.sv` so it records and compares normalized store-retirement events independently of accepted store-request traces. For each event compare retirement order, effective address, unshifted data, lane strobe, and exact count. Preserve the accepted-store-request comparison as a secondary memory-side-effect check; it must no longer substitute for retirement-contract comparison.
-
-Add canonical targets only where needed for reproducibility:
-
-| Purpose | Target to add |
-| --- | --- |
-| Direct store-retirement differential regression across modes | `test-scalar-diff-store-retire` |
-| Controlled store-retirement negative detection | `test-scalar-diff-store-retire-negative` |
-
-The direct comparison must run under immediate memory (mode 0), request backpressure (mode 1), delayed response (mode 2), and mixed timing (mode 3), use `make test-scalar-diff-seed SEED=<n> MODE=<n>` for exact reproduction, and include the current subword directed/random/stall campaign. Do not require cycle-by-cycle equality.
-
-## Controlled negative testing
-
-Add or extend a deterministic negative mode that corrupts exactly one recorded pipeline store-retirement address, data, strobe, or event count after collection. The checker must report the intended mismatch and pass only because detection occurred; it must not depend on timeout or corrupt the underlying request-side-effect comparison.
-
-## Promotion reassessment
-
-After all evidence is complete, update the production-readiness assessment and ADR-012 only if the recommendation changes. The implementation may recommend continued C (do not promote), conditional promotion, or promotion readiness, but it must not rename, promote, or substitute the pipeline automatically.
-
-Any reconsideration requires all current regressions passing, direct contract equivalence, no newly discovered correctness blocker, factual documentation, and human review. Passing this narrow trace repair alone does not establish performance, synthesis, formal, or broad verification readiness.
+The aggregate target must run every focused adapter/stub test. Add an exact parameter or target for deterministic latency/backpressure reproduction if the tests use configurable modes.
 
 ## Required verification
 
-Run and report:
+Run and report every new adapter/stub target; `make test-scalar-directed`; all existing `test-scalar-pipe-*` targets including store-retirement and trap; all scalar differential smoke/random/stall/negative/redirect/subword/store-retirement targets; `make lint`; `make check`; `make docs-check`; and `git diff --check`.
 
-```sh
-make test-scalar-pipe-store-retire
-make test-scalar-pipe-dev
-make test-scalar-pipe-alu
-make test-scalar-pipe-forward
-make test-scalar-pipe-control
-make test-scalar-pipe-redirect
-make test-scalar-pipe-memory
-make test-scalar-pipe-trap
-make test-scalar-diff-smoke
-make test-scalar-diff-random
-make test-scalar-diff-stall
-make test-scalar-diff-negative
-make test-scalar-diff-redirect-backpressure
-make test-scalar-diff-subword-directed
-make test-scalar-diff-subword-random
-make test-scalar-diff-subword-stall
-make test-scalar-diff-subword-negative
-make test-scalar-diff-store-retire
-make test-scalar-diff-store-retire-negative
-make test-scalar-diff-seed SEED=<recorded-seed> MODE=<0|1|2|3>
-make lint
-make check
-make docs-check
-git diff --check
-```
-
-Document the exact seeds, modes, runtime, and outputs used by the new differential target. The existing expected-failing throughput experiment remains non-blocking and cannot support a promotion claim.
+Do not run the expected-failing throughput experiment as a required pass. Record exact commands, completion status, wall time, latency/backpressure configuration, command/completion counts, trap PC/cause, and deterministic rerun commands.
 
 ## Acceptance criteria
 
 The milestone is complete only when:
 
-1. `rv32_core_pipe` drives all four `retire_mem_*` fields according to the frozen reference contract.
-2. SB, SH, and SW are directly covered at every valid byte/halfword offset.
-3. Every completed store retires exactly once, with no early, duplicate, or register-write retirement.
-4. Request-backpressured, delayed-response, and mixed timing behavior is proven correct.
-5. Faulting/misaligned, killed/wrong-path, stale, and younger-after-terminal-trap stores produce no retirement event.
-6. Reset leaves no stale store-retirement event.
-7. The focused pipeline regression and direct differential store-retirement comparison pass.
-8. Exact seed/mode reproduction and controlled-negative detection work.
-9. All prior scalar, focused pipeline, differential, trap, lint, and repository regressions remain passing.
-10. `rv32_core.sv` and frozen external interfaces remain unchanged.
-11. Documentation and milestone history are updated factually; promotion status is reassessed but not enacted automatically.
-12. No vector RTL, commit, or push is performed.
+1. A documented experimental integration boundary and selected direct/wrapper architecture exist.
+2. At least one custom-0 stub instruction decodes and issues a complete v1 command payload.
+3. Command valid/ready and payload stability are correct under backpressure.
+4. Exactly one command may be outstanding and scalar execution blocks while it is active.
+5. Success completion valid/ready and payload stability are correct under backpressure.
+6. Successful completion optionally writes the correct scalar result and retires exactly once.
+7. Exception completion traps once with exact PC/cause and no scalar writeback.
+8. No younger scalar retirement occurs before the blocking vector instruction completes.
+9. Wrong-path vector instructions issue no command.
+10. Reset cancels outstanding work and no stale completion is accepted afterward.
+11. Assertions cover the key protocol and ordering rules.
+12. All prior scalar regressions remain passing.
+13. No real vector datapath/register file/memory/sparse logic is implemented.
+14. Documentation and milestone history are factual; no production promotion occurs.
+15. No commit or push occurs.
 
 ## Stop conditions
 
-Stop for human review if the reference retirement contract is ambiguous; store retirement semantics differ materially between cores; an external interface change is required; exact completion cannot be observed without invasive redesign; a broad pipeline-control redesign is required; a likely reference-core defect is found; or promotion would require restructuring beyond this milestone. Missing tests or harness support are implementation work, not stop conditions.
+Stop for human review if frozen scalar interfaces must change materially; command/completion behavior conflicts with accepted ADRs; precise retirement requires broad pipeline redesign; reset/trap semantics are ambiguous; custom-0 conflicts with current scalar decoding; wrapper versus direct integration has material unresolved consequences; a likely scalar bug is found; or multiple outstanding commands become necessary. Missing tests or ordinary adapter work are not stop conditions.
 
 ## Documentation requirements
 
-On completion update `docs/architecture/scalar_production_readiness.md`, `docs/architecture/scalar_interface_freeze.md` if clarification is necessary, `docs/implementation_status.md`, `docs/verification_plan.md`, relevant scalar verification documentation, and `docs/milestone_history.md`. Update ADR-012 only if the promotion recommendation changes. Update `README.md` only if stable user-facing commands change.
+On completion update `docs/architecture/scalar_vector_interface.md`, `docs/architecture.md`, `docs/implementation_status.md`, `docs/verification_plan.md`, relevant ADRs when clarification is necessary, and `docs/milestone_history.md`; update `README.md` only for stable user-facing test commands. Document the experimental encoding, command/completion fields, selected integration architecture, blocking/retirement/exception/reset behavior, stub behavior, tests, limitations, and why this is not a real vector implementation.
 
 ## Required final report
 
 Report:
 
 1. `MILESTONE COMPLETE` or `MILESTONE NOT COMPLETE`.
-2. The exact retirement contract derived from the reference core and freeze.
-3. RTL/test/harness changes and direct differential comparison added.
-4. Store widths/offsets, exact-once, timing-mode, redirect/trap/reset, and controlled-negative evidence.
-5. Exact commands, seeds, modes, runtime, and pass/fail results.
-6. Bugs found, fixes made, promotion recommendation, documentation updates, complete changed-file list, and diff-review findings.
-7. Remaining limitations and human-review items.
-8. Confirmation that `rv32_core.sv` was unchanged and no vector RTL, commit, or push occurred.
+2. Selected integration architecture and experimental instruction encoding.
+3. Command/completion protocol, pipeline stall/retirement, exception/reset, and stub behavior implemented.
+4. Tests/assertions added, exact commands/results, deterministic configurations, bugs/fixes, and changed files.
+5. Diff-review findings and remaining limitations.
+6. Confirmation that no real vector datapath/register file/memory was implemented, `rv32_core.sv` was unchanged, and no commit or push occurred.
