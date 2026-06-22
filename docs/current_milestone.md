@@ -1,32 +1,33 @@
-# Milestone: Vector Register File and 4-Lane INT8 VADD
+# Milestone: Signed INT8 Vector Dot Product
 
 ## Objective
 
-Implement the first genuine Sparrow-V vector execution path:
+Implement Sparrow-V’s first AI-oriented vector arithmetic operation:
 
-- an internal vector register file owned by the vector engine;
-- a 4-lane, 32-bit vector datapath;
-- one lane-wise wrapping INT8 vector-add operation;
-- execution through the existing blocking scalar-to-vector command/completion protocol;
-- focused verification with an independent golden model.
+```text
+VDOT8 rd, vs1, vs2
+```
 
-This milestone replaces the purely scalar-result stub as the only vector behavior with a real vector-register operation, while preserving the existing adapter and stub regression behavior.
+`VDOT8` reads two 32-bit vector registers as four signed INT8 lanes, multiplies corresponding lanes, sums the four signed products into a signed 32-bit result, and writes that result to a scalar register.
+
+The milestone must reuse the existing blocking scalar/vector command-completion protocol and preserve the existing VADD8 vector-register implementation and regression coverage.
 
 ## Baseline
 
-The repository currently has:
+The repository currently contains:
 
-- `rtl/core/rv32_core.sv` as the reference scalar core;
+- `rtl/core/rv32_core.sv` as the unchanged scalar reference core;
 - `rtl/core/rv32_core_pipe.sv` as the experimental scalar/vector integration core;
-- a verified Custom-0 command/completion interface;
-- one blocking, in-order vector command outstanding;
-- precise successful completion and exception handling;
-- command and completion backpressure verification;
-- reset cancellation and wrong-path suppression;
-- `rtl/vector/rv32_vec_stub_engine.sv` for protocol verification;
-- canonical scalar, vector, and full-regression targets.
-
-The existing scalar/vector protocol must remain compatible.
+- a verified blocking, in-order, one-command-outstanding scalar/vector protocol;
+- a 32 × 32-bit vector register file;
+- four little-endian INT8 lanes per vector register;
+- a verified wrapping `VADD8` operation;
+- vector-register writes committed on completion handshake;
+- command and completion backpressure handling;
+- reset cancellation;
+- wrong-path suppression;
+- precise vector success and exception retirement;
+- canonical vector and full-regression targets.
 
 ## Relevant Context
 
@@ -34,137 +35,132 @@ Read:
 
 - `AGENTS.md`
 - `docs/codex_context.md`
-- `docs/architecture/scalar_vector_interface.md`
-- `docs/decisions/004_scalar_vector_protocol.md`
 - `docs/current_milestone.md`
+- `docs/architecture/scalar_vector_interface.md`
+- `docs/architecture/vector_vadd8.md`
+- `docs/decisions/004_scalar_vector_protocol.md`
 - `rtl/core/rv32_core_pipe.sv`
-- `rtl/vector/rv32_vec_stub_engine.sv`
-- `tb/integration/tb_scalar_pipe_vec_stub.sv`
-- relevant Makefile targets and vector-test helpers.
+- `rtl/vector/rv32_vec_vadd_engine.sv`
+- `tb/integration/tb_vector_vadd.sv`
+- relevant vector Makefile targets.
 
-Read additional files only when required by the implementation.
+Read additional files only when a concrete implementation or verification need requires them.
 
 ## In Scope
 
-### Vector register file
+### Signed INT8 dot product
 
-Implement an internal vector register file with:
-
-- 32 vector registers unless an existing approved specification requires another count;
-- 32 bits per vector register;
-- four 8-bit lanes per register;
-- two logical read operands;
-- one write destination;
-- synchronous or combinational reads chosen deliberately and documented;
-- one architectural write per completed vector operation;
-- reset behavior defined and verified;
-- vector register state owned entirely by the vector engine.
-
-Vector register `v0` is a normal register unless an existing architecture decision explicitly reserves it.
-
-Do not infer scalar `x0` semantics for vector registers.
-
-### INT8 vector addition
-
-Implement one genuine vector operation:
+Implement:
 
 ```text
-VADD8 vd, vs1, vs2
+VDOT8 rd, vs1, vs2
 ```
 
-Semantics for each lane `i`:
+For each lane `i` from 0 through 3:
 
 ```text
-vd[i] = (vs1[i] + vs2[i]) mod 256
+a_i = signed(vs1[8*i +: 8])
+b_i = signed(vs2[8*i +: 8])
+p_i = a_i * b_i
+```
+
+The scalar result is:
+
+```text
+rd = p_0 + p_1 + p_2 + p_3
 ```
 
 Requirements:
 
-- four independent 8-bit additions;
-- wrapping two’s-complement arithmetic;
+- four signed INT8 multiplications;
+- each product represented with sufficient signed width;
+- accumulation into a signed 32-bit result;
 - no saturation;
-- signed and unsigned interpretations produce the same stored 8-bit sum;
-- source registers are read from the vector register file;
-- result is written to the vector destination register;
-- the operation produces no scalar register writeback;
-- the instruction retires exactly once after vector-register write completion;
-- the operation uses the existing command/completion protocol.
+- no truncation of the mathematically valid four-lane INT8 dot product;
+- the result returned through the existing scalar completion-result path;
+- scalar `rd` written exactly once;
+- no vector-register write for `VDOT8`;
+- exactly one successful retirement;
+- no exception for a valid instruction.
+
+The full possible result range fits comfortably in signed 32 bits.
+
+### Existing vector state
+
+Reuse the existing 32 × 32-bit vector register file.
+
+`VDOT8` must:
+
+- read `vs1` and `vs2` from vector architectural state;
+- leave every vector register unchanged;
+- support `vs1 == vs2`;
+- correctly read `v0` and `v31`;
+- preserve all existing `VADD8` behavior.
+
+Do not duplicate the vector register file across separate architectural engines.
+
+If the current VADD-specific engine structure would create duplicate state, refactor it into a shared vector execution engine or shared vector-register owner while preserving behavior and tests.
 
 ### Experimental encoding
 
-Use the existing Custom-0 opcode `0x0b`.
+Continue using Custom-0 opcode `0x0b`.
 
-Choose and document a currently unused `funct3` value for `VADD8`.
+Assign an unused experimental operation encoding for `VDOT8`.
 
-The command must carry:
+The chosen encoding must:
 
-- `vs1`;
-- `vs2`;
-- `vd`;
-- operation identifier;
-- issuing PC;
-- fixed command ID and other protocol metadata already required.
+- not conflict with existing stub operations;
+- not conflict with `VADD8` at `funct3=011`;
+- identify two vector source indices;
+- identify one scalar destination register;
+- indicate scalar-result writeback;
+- remain explicitly experimental rather than final ISA design.
 
-Do not redesign the entire vector instruction encoding.
+Use the existing instruction-field mapping where practical:
 
-The encoding remains experimental and is not the final Sparrow-V ISA.
+- `rs1` field as `vs1`;
+- `rs2` field as `vs2`;
+- `rd` field as scalar destination `rd`.
 
-### Test-only vector-register access
+Document the exact encoding.
 
-Provide a bounded verification mechanism for initializing and observing vector registers.
+Unsupported encodings must continue to follow the existing precise illegal-instruction behavior.
 
-Preferred approaches, in order:
+### Scalar-result completion
 
-1. testbench-visible debug ports on a development wrapper or vector engine;
-2. clearly isolated simulation-only tasks or hierarchical access;
-3. temporary experimental Custom-0 register-transfer operations only if necessary.
+For a valid `VDOT8` completion:
 
-The mechanism must:
-
-- not alter the scalar architectural interface;
-- not be presented as part of the final vector ISA;
-- not introduce vector memory behavior;
-- be clearly documented as test-only.
-
-Avoid adding a broad software-visible debug architecture.
-
-### Existing stub behavior
-
-Preserve the existing scalar/vector protocol regression path.
-
-Either:
-
-- retain `rv32_vec_stub_engine.sv` for adapter-focused tests and add a separate real vector engine module; or
-- evolve the current vector module while keeping all existing adapter/stub tests working through a dedicated compatibility mode.
-
-Prefer a clean separation if it avoids mixing protocol-test behavior with architectural vector state.
-
-Do not delete useful adapter regression coverage.
+- completion status indicates success;
+- completion result-valid is asserted;
+- completion result contains the signed 32-bit dot product;
+- the scalar pipeline writes the result to `rd`;
+- scalar `x0` remains zero if `rd == x0`;
+- no vector-register write occurs;
+- retirement occurs exactly once after completion acceptance.
 
 ## Out of Scope
 
 Do not implement:
 
+- vector multiply producing a vector destination;
+- vector subtraction;
+- multiply-accumulate with persistent accumulator state;
+- vector accumulator registers;
+- INT16 arithmetic;
+- saturation;
+- rounding;
+- configurable vector length;
+- masks or predicates;
+- reductions other than this fixed four-lane dot product;
 - vector loads or stores;
-- scalar-to-vector data movement as a final ISA feature;
 - vector memory interface;
 - scratchpad memory;
 - banked memory;
-- INT16 execution;
-- vector subtraction;
-- vector multiplication;
-- dot product;
-- widening accumulation;
-- reductions;
-- masks or predicates;
-- saturation;
-- configurable vector length;
-- tail or mask policies;
 - sparse metadata;
-- 2:4 sparsity;
-- gather or scatter;
+- 2:4 sparse execution;
 - compiler, assembler, or intrinsics;
-- performance optimization;
+- multiple outstanding vector commands;
+- speculative or out-of-order vector execution;
 - FPGA or ASIC implementation;
 - promotion of `rv32_core_pipe`;
 - changes to `rtl/core/rv32_core.sv`.
@@ -173,7 +169,7 @@ Do not implement:
 
 ### Command acceptance
 
-A `VADD8` command is accepted only on:
+A `VDOT8` command is accepted only on:
 
 ```text
 vec_cmd_valid && vec_cmd_ready
@@ -181,224 +177,323 @@ vec_cmd_valid && vec_cmd_ready
 
 Verify:
 
-- command payload stability under backpressure;
-- vector source and destination indices are captured once;
-- no duplicate command is accepted;
-- no command is accepted while another is outstanding;
-- wrong-path `VADD8` instructions are not issued.
+- command payload stability while ready is low;
+- `vs1`, `vs2`, scalar `rd`, issuing PC, operation identifier, and writeback intent are captured correctly;
+- no duplicate command acceptance;
+- no second command while one is outstanding;
+- no command for a killed or wrong-path instruction.
 
-### Execution
+### Arithmetic correctness
 
-After command acceptance:
+The implementation must use explicitly signed arithmetic.
 
-- the vector engine reads `vs1` and `vs2`;
-- computes four wrapping INT8 sums;
-- writes the complete 32-bit result to `vd`;
-- does not expose a partially updated destination;
-- does not produce scalar result-valid or scalar writeback;
-- produces one successful completion.
+Avoid relying on implicit SystemVerilog signedness across packed slices.
 
-Source/destination aliasing must work correctly:
+Each 8-bit lane should be converted deliberately to a signed value before multiplication.
 
-- `vd == vs1`;
-- `vd == vs2`;
+Each product must be wide enough for:
+
+```text
+-128 × -128 = 16384
+```
+
+The four products must be sign-extended correctly before accumulation.
+
+Directed cases must include:
+
+- all-zero operands;
+- positive × positive;
+- positive × negative;
+- negative × negative;
+- `-128 × -128`;
+- `127 × 127`;
+- mixed signs across lanes;
+- products that cancel to zero;
+- all lanes at positive extremes;
+- all lanes at negative/extreme combinations;
 - `vs1 == vs2`;
-- `vd == vs1 == vs2`.
+- use of `v0`;
+- use of `v31`.
 
-Source values must reflect the pre-instruction architectural state.
+Explicit expected examples should include:
 
-### Completion and retirement
+```text
+[1, 2, 3, 4] dot [5, 6, 7, 8] = 70
+```
 
-The vector-register write must become architecturally visible exactly once.
+```text
+[127, 127, 127, 127] dot [127, 127, 127, 127] = 64516
+```
 
-Completion requirements:
+```text
+[-128, -128, -128, -128] dot [-128, -128, -128, -128] = 65536
+```
 
-- no vector-register write before the operation is committed to complete;
-- no scalar retirement before completion handshake;
-- completion payload remains stable under completion backpressure;
-- exactly one completion handshake;
-- exactly one successful vector retirement;
-- zero scalar register writes for `VADD8`;
-- no trap for a valid `VADD8`;
-- younger scalar instructions do not retire before the blocking vector instruction completes;
+```text
+[1, -1, 2, -2] dot [4, 4, 3, 3] = 0
+```
+
+### Completion and scalar writeback
+
+Verify:
+
+- completion payload is held stable under completion backpressure;
+- no scalar writeback occurs before completion handshake;
+- exactly one scalar write occurs after successful completion;
+- scalar write destination equals instruction `rd`;
+- scalar write data equals the golden dot-product result;
+- exactly one successful retirement occurs;
+- no vector-register write occurs;
+- younger scalar instructions do not retire before the blocking vector operation completes;
 - scalar execution resumes correctly afterward.
 
-Define clearly whether the vector-register write occurs:
+### Destination behavior
 
-- when completion becomes valid; or
-- when completion handshakes.
+Cover:
 
-Prefer completion-handshake commit semantics unless the existing protocol or implementation structure strongly requires another safe model.
-
-If write visibility occurs before completion handshake, prove that reset and completion backpressure cannot expose an unretired architectural update.
+- ordinary destination register;
+- `rd == x0`, where completion and retirement occur but x0 remains zero;
+- a following scalar instruction consuming the dot-product result;
+- consecutive `VDOT8` instructions with different scalar destinations;
+- scalar source/destination activity around the vector instruction without corruption.
 
 ### Reset
 
-Verify reset:
+Verify reset while `VDOT8` is outstanding:
 
-- clears engine busy and pending-operation state;
-- cancels an accepted but uncompleted `VADD8`;
-- prevents a cancelled instruction from writing `vd`;
-- prevents stale completion or retirement;
-- allows a fresh post-reset `VADD8` to execute normally.
+- clears pending execution and completion state;
+- produces no stale completion;
+- produces no scalar writeback;
+- produces no retirement;
+- produces no vector-register write;
+- allows a fresh post-reset `VDOT8` to complete normally.
 
-Do not require all vector registers to reset to zero unless deliberately chosen.
+Vector-register contents should remain consistent with the existing VADD8 reset contract.
 
-If vector registers are not reset, tests must initialize every register they observe.
+### Wrong-path suppression
 
-### Invalid encoding
+Include a taken redirect with a wrong-path `VDOT8`.
 
-Unsupported Custom-0 vector-operation encodings must retain the existing defined behavior:
+Verify:
 
-- precise illegal-instruction handling; or
-- another already documented experimental exception path.
+- zero command handshake for the wrong-path instruction;
+- zero completion;
+- zero scalar writeback;
+- zero successful vector retirement;
+- target-path execution proceeds;
+- a valid target-path `VDOT8`, if used, completes exactly once.
 
-Do not silently treat unsupported vector operations as `VADD8`.
+Track the suppressed instruction by PC and expected destination where practical.
 
-## Implementation Guidance
+### Existing VADD8 preservation
 
-Use parameterization where it improves clarity without overengineering.
+All existing VADD8 behavior must remain valid:
 
-Suggested constants:
+- vector-register state;
+- wrapping lane arithmetic;
+- aliases;
+- dependent chains;
+- command/completion backpressure;
+- reset;
+- wrong-path suppression;
+- unsupported encoding behavior;
+- exact vector-register write accounting.
 
-```text
-VLEN = 32
-LANES = 4
-SEW = 8
-VREG_COUNT = 32
-```
+## Architecture Guidance
 
-Include elaboration-time checks where practical:
+Prefer a single architectural owner for the vector register file.
 
-- `VLEN == LANES * SEW`;
-- register-index width is sufficient;
-- lane count and element width are positive.
+A reasonable implementation is to evolve the VADD engine into a more general vector execution engine that supports:
 
-Keep the arithmetic structurally clear enough that future `VSUB8`, `VMUL8`, INT16, and dot-product operations can be added without rewriting the register file.
+- VADD8 with vector destination and no scalar result;
+- VDOT8 with scalar destination and no vector write.
 
-Do not build a generic vector execution framework far beyond what `VADD8` needs.
+Do not introduce duplicate vector-register arrays in separate engines.
+
+Keep operation-specific pending metadata explicit:
+
+- operation type;
+- destination kind;
+- vector destination when applicable;
+- scalar result when applicable;
+- completion result-valid;
+- pending result data.
+
+Preserve the existing command/completion interface unless a small, clearly justified extension is necessary.
 
 ## Focused Development Tests
 
-Add focused tests and canonical targets covering at least:
+Add focused tests and canonical targets for:
 
-### Register-file behavior
+### Directed arithmetic
 
-- independent initialization and observation;
-- two-source read;
-- one-destination write;
-- no unintended register changes;
-- highest and lowest register indices;
-- vector-register zero is writable unless explicitly reserved.
+- all required named arithmetic cases;
+- explicit expected 32-bit signed results;
+- positive and negative values;
+- extreme values;
+- cancellation;
+- `vs1 == vs2`;
+- `v0` and `v31`.
 
-### Basic VADD8
+### Scalar writeback
+
+- correct `rd`;
+- correct result data;
+- exactly one scalar write;
+- no vector-register write;
+- `rd == x0`;
+- dependent scalar consumer immediately after completion.
+
+### Backpressure
+
+Command backpressure:
+
+- hold command ready low for a fixed number of cycles;
+- verify full payload stability;
+- verify no completion, writeback, or retirement before acceptance;
+- accept exactly once.
+
+Completion backpressure:
+
+- hold completion ready low;
+- verify completion status, result-valid, result data, cause, and ID remain stable;
+- verify no scalar writeback or retirement before handshake;
+- verify exactly one writeback and retirement afterward.
+
+### Reset
+
+- accept `VDOT8`;
+- reset before completion;
+- verify zero completion/writeback/retirement;
+- execute a fresh command successfully after reset.
+
+### Wrong-path suppression
+
+- place `VDOT8` behind a taken redirect;
+- prove it generates no vector or scalar architectural event;
+- prove target-path execution continues.
+
+### Consecutive and dependent execution
+
+Cover:
+
+```text
+VDOT8 x5, v1, v2
+ADDI  x6, x5, 1
+```
+
+and at least two consecutive dot products writing different scalar registers.
+
+### Deterministic randomized testing
 
 Use an independent testbench golden model.
 
-Cover:
+Randomize:
 
-- ordinary positive lane values;
-- zero inputs;
-- per-lane carry and wrapping;
-- `0x7f + 0x01 = 0x80`;
-- `0xff + 0x01 = 0x00`;
-- negative two’s-complement values;
-- mixed independent lane values;
-- all four lanes active.
+- all lane values;
+- `vs1` and `vs2` indices;
+- equal-source cases;
+- scalar destination including occasional x0;
+- positive, negative, and extreme patterns.
 
-### Aliasing
+Use a fixed reported seed and a bounded but meaningful number of cases.
 
-Cover:
+Compare:
 
-- `vd == vs1`;
-- `vd == vs2`;
-- `vs1 == vs2`;
-- all indices equal.
+- completion result;
+- scalar retirement result;
+- scalar register state;
+- absence of vector-register writes.
 
-### Protocol integration
+## Event Accounting
 
-Cover:
+Track directly:
 
-- immediate command acceptance;
-- command backpressure;
-- completion backpressure;
-- exactly one command;
-- exactly one completion;
-- exactly one vector retirement;
-- zero scalar vector-result writes;
-- scalar instruction before and after `VADD8`;
-- no younger retirement before completion;
-- wrong-path `VADD8` suppression;
-- reset while `VADD8` is outstanding;
-- no stale completion or vector-register write after reset.
+- command handshakes;
+- completion handshakes;
+- scalar writeback events caused by `VDOT8`;
+- successful `VDOT8` retirements;
+- vector-register write events;
+- traps.
 
-### Sequential dependence
-
-Cover at least one chain:
+For each successful non-x0 `VDOT8`:
 
 ```text
-VADD8 v3, v1, v2
-VADD8 v4, v3, v1
+commands = 1
+completions = 1
+scalar writes = 1
+successful retirements = 1
+vector writes = 0
+traps = 0
 ```
 
-Verify the second instruction observes the committed result of the first.
+For successful `rd == x0`:
 
-### Randomized arithmetic
+```text
+commands = 1
+completions = 1
+scalar architectural writes = 0
+successful retirements = 1
+vector writes = 0
+traps = 0
+```
 
-Run deterministic randomized testing across:
-
-- source values;
-- vector register indices;
-- destination aliases;
-- lane overflow patterns.
-
-Use a fixed seed or a reported deterministic seed set.
-
-Compare every result against an independent software-style golden model in the testbench.
-
-A modest bounded run is sufficient; broad ISA randomization is not required.
+For reset-cancelled or wrong-path operations, require all applicable event counts to remain zero.
 
 ## Assertions
 
-Add or preserve assertions for:
+Add or preserve meaningful assertions for:
 
 - no second command while busy;
-- no completion without an outstanding command;
 - command payload stability under backpressure;
 - completion payload stability under backpressure;
-- no vector-register write without a valid accepted operation;
-- at most one vector-register write per command;
-- destination index remains stable while an operation is pending;
-- no scalar writeback for `VADD8`;
-- no successful retirement before completion acceptance;
-- reset cancels pending writeback;
+- no completion without an accepted command;
+- no scalar writeback before completion handshake;
+- no vector-register write for `VDOT8`;
+- VADD8 never asserts scalar result-valid;
+- VDOT8 always asserts scalar result-valid on successful completion;
+- at most one architectural destination write per command;
+- destination metadata stability while pending;
+- reset clears pending completion/writeback state;
 - no duplicate completion or retirement.
 
-Avoid assertions that depend on testbench-only hierarchy when a local module property is possible.
+Avoid tautological assertions.
 
 ## Canonical Targets
 
 Add clear targets following repository conventions, including equivalents of:
 
 ```text
-test-vector-regfile
-test-vector-vadd-directed
-test-vector-vadd-alias
-test-vector-vadd-backpressure
-test-vector-vadd-reset
-test-vector-vadd-random
-test-vector-vadd-all
+test-vector-vdot-directed
+test-vector-vdot-backpressure
+test-vector-vdot-reset
+test-vector-vdot-redirect
+test-vector-vdot-random
+test-vector-vdot-invalid
+test-vector-vdot-all
 ```
 
-Exact target names may be adjusted to match existing conventions.
+Exact names may be adjusted to fit existing conventions.
 
-Update `test-vector-regression` to include the completed vector-register/VADD tests while preserving adapter/stub regression coverage.
+Update:
 
-Do not duplicate the entire scalar regression inside focused vector targets.
+```text
+test-vector-regression
+```
+
+to include both:
+
+- existing scalar/vector stub coverage;
+- existing VADD8 coverage;
+- new VDOT8 coverage.
+
+Focused VDOT8 targets must not duplicate the full scalar regression.
 
 ## Final Acceptance Regression
 
-After focused tests are stable, run once:
+During development, run only focused VDOT8 tests and affected vector tests.
+
+After the implementation is stable, run once:
 
 ```text
 make test-vector-regression
@@ -409,98 +504,101 @@ make docs-check
 git diff --check
 ```
 
-Do not repeatedly run the full regression during normal edit/debug cycles.
-
 ## Acceptance Criteria
 
 The milestone is complete only when:
 
-1. A real internal vector register file exists.
-2. The register file contains 32-bit registers interpreted as four INT8 lanes.
-3. Two vector sources and one vector destination are supported.
-4. A real `VADD8` operation executes lane-wise wrapping addition.
-5. The operation reads and writes vector architectural state.
-6. Source/destination aliasing is correct.
-7. `VADD8` uses the existing blocking command/completion protocol.
-8. Exactly one command is accepted per instruction.
-9. Exactly one completion is accepted per instruction.
-10. Exactly one successful vector retirement occurs.
-11. No scalar register writeback occurs for `VADD8`.
-12. Completion backpressure does not duplicate or prematurely commit the operation.
-13. Command backpressure preserves all relevant payload fields.
-14. Reset cancels pending execution without changing the destination.
-15. Wrong-path `VADD8` instructions do not issue or change vector state.
-16. Sequential dependent vector operations observe committed results.
-17. Directed arithmetic tests pass.
-18. Deterministic randomized golden-model tests pass.
-19. Existing scalar/vector adapter tests continue to pass.
-20. Full scalar regression remains passing.
-21. Unsupported vector encodings are not silently executed as `VADD8`.
-22. Documentation is updated factually.
-23. No vector memory, scratchpad, INT16, multiplication, dot product, masks, reductions, or sparsity is added.
-24. `rtl/core/rv32_core.sv` remains unchanged.
-25. No commit or push is performed by Codex.
-26. `.codex/milestone_result.md` is written in the required compact format.
+1. `VDOT8` performs four signed INT8 multiplications.
+2. Products are represented with correct signed width.
+3. Products are accumulated into an exact signed 32-bit result.
+4. The existing vector register file is reused rather than duplicated.
+5. `VDOT8` leaves all vector registers unchanged.
+6. `VDOT8` returns its result through scalar completion writeback.
+7. Scalar destination `rd` is correct.
+8. `rd == x0` preserves x0 while still completing and retiring.
+9. Exactly one command is accepted.
+10. Exactly one completion is accepted.
+11. Exactly one scalar write occurs for successful non-x0 operations.
+12. Exactly one successful vector retirement occurs.
+13. Zero vector-register writes occur for `VDOT8`.
+14. Command backpressure preserves the complete payload.
+15. Completion backpressure preserves the complete completion payload.
+16. No writeback or retirement occurs before completion handshake.
+17. Reset cancels an outstanding operation with no stale effects.
+18. Wrong-path `VDOT8` does not issue or change architectural state.
+19. A scalar consumer correctly observes the completed dot-product result.
+20. Consecutive dot products execute correctly.
+21. Directed arithmetic corner cases pass.
+22. Deterministic randomized golden-model tests pass.
+23. Unsupported encodings retain precise illegal behavior.
+24. Existing VADD8 and adapter regressions remain passing.
+25. Full scalar regression remains passing.
+26. Documentation matches the implementation.
+27. No vector memory, scratchpad, INT16, masks, sparsity, or compiler support is added.
+28. `rtl/core/rv32_core.sv` remains unchanged.
+29. Codex creates no commit or push.
+30. `.codex/milestone_result.md` is written in compact format.
 
 ## Stop Conditions
 
 Stop for human review only if:
 
-- the existing command payload cannot represent `vs1`, `vs2`, and `vd`;
-- implementing vector architectural state requires a material scalar-interface redesign;
-- precise vector-register commit conflicts with the approved completion protocol;
-- Custom-0 encoding conflicts with existing implemented instructions;
-- reset semantics cannot prevent an unretired vector-register update;
-- direct integration requires substantial scalar-pipeline restructuring;
-- a likely pre-existing scalar or adapter correctness bug is discovered;
-- the milestone would require vector memory or multiple outstanding commands.
+- the existing command payload cannot represent two vector sources and a scalar destination;
+- preserving one vector-register owner requires a major architecture redesign;
+- signed dot-product writeback conflicts with the approved completion protocol;
+- no unused experimental encoding is available;
+- precise scalar writeback requires broad pipeline restructuring;
+- reset cannot cancel pending scalar-result completion safely;
+- multiple outstanding commands become necessary;
+- a likely pre-existing scalar, adapter, or VADD8 correctness bug is discovered.
 
-Ordinary RTL bugs, test failures, encoding selection, alias handling, and documentation work are not stop conditions.
+Ordinary signedness bugs, arithmetic-width errors, test failures, refactoring of the vector engine, and documentation updates are not stop conditions.
 
 ## Required Documentation
 
 Update only materially affected files, normally:
 
 - `docs/architecture/scalar_vector_interface.md`;
-- the relevant vector architecture document, creating one concise document if none exists;
+- the vector execution architecture document, either extending `vector_vadd8.md` or creating a concise shared vector execution document;
 - `docs/implementation_status.md`;
 - `docs/verification_plan.md`;
 - `docs/milestone_history.md`;
-- README only for stable user-facing commands.
+- README only if stable user-facing test commands change.
 
 Document:
 
-- vector-register organization;
-- VLEN, lane count, and element width;
-- read/write behavior;
-- `VADD8` semantics;
-- experimental encoding;
-- aliasing behavior;
-- architectural commit point;
-- reset behavior;
-- test-only initialization/observation mechanism;
-- verification targets;
+- exact experimental encoding;
+- signed lane interpretation;
+- product widths;
+- accumulation semantics;
+- scalar result behavior;
+- vector-state non-modification;
+- completion and writeback timing;
+- reset and wrong-path behavior;
+- focused test targets;
+- random seed and case count;
 - remaining limitations.
 
-Do not present this milestone as a complete vector ISA or complete vector processor.
+Do not present `VDOT8` as a complete vector ISA or full AI accelerator.
 
 ## Result File
 
-Write `.codex/milestone_result.md` using the repository’s compact result format.
+Write `.codex/milestone_result.md` using the repository’s compact format.
 
 Include:
 
 - completion status;
-- architecture chosen;
-- VADD8 encoding;
-- register-file organization;
-- commit semantics;
+- architecture/refactor chosen;
+- VDOT8 encoding;
+- signed arithmetic implementation;
+- scalar writeback behavior;
+- vector-register non-write evidence;
 - focused test commands and results;
-- randomized test seed/count;
+- random seed and case count;
 - final regression commands and results;
 - bugs fixed;
 - changed files;
 - remaining limitations;
-- confirmation that no vector memory, scratchpad, INT16, multiplication, dot product, masks, reductions, or sparsity was implemented;
-- confirmation that `rtl/core/rv32_core.sv` was unchanged;
+- confirmation that VADD8 remains passing;
+- confirmation that `rtl/core/rv32_core.sv` is unchanged;
 - confirmation that no commit or push occurred.
