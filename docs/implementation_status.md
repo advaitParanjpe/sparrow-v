@@ -45,12 +45,25 @@
   and completion backpressure, reset, redirect, misalignment, and a 24-case
   deterministic golden-model sequence (seed `0x1234abcd`).
 
+- Experimental `VSDOT8` uses Custom-0 `funct3=111`, two compressed signed
+  INT8 weights, six 2-of-4 patterns, precise cause 18 invalid metadata, and
+  completion-gated two-executed/two-skipped debug accounting. `make
+  test-vector-vsdot-all` covers directed dense equivalence, stalls, reset,
+  redirect, invalid patterns, and 96 deterministic random cases (seed
+  `0x5a17c0de`).
+- A generated bare-metal 16-input/four-output quantized fully connected
+  workload now executes through the experimental pipeline in scalar software
+  multiply, dense `VDOT8`, and 2:4 `VSDOT8` forms. All report
+  `[382,-446,-246,1054]`; exact layout, encodings, and measured counters are
+  in `docs/architecture/sparse_fc_workload.md`, with focused targets
+  `make test-workload-{encoder,golden,scalar,dense,sparse,compare,all}`.
+
 ## Planned, not implemented
 
 Vector ISA expansion, INT16 lanes, masks, configurable reductions beyond fixed
 VDOT8, scratchpad banking, external memory interfaces, DMA, vector lengths
-beyond 32 bits, gather/scatter, 2:4 sparse metadata, formal verification,
-compiled bare-metal execution, synthesis, FPGA, and ASIC/OpenLane flows.
+beyond 32 bits, gather/scatter, formal verification, synthesis, FPGA, and
+ASIC/OpenLane flows.
 
 ## Important sources and commands
 

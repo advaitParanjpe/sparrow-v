@@ -33,3 +33,7 @@ completion-handshake vector write for test accounting. They are not a scalar
 interface, software ABI, or ISA feature. There is no vector memory, masks,
 wider elements, saturation, persistent accumulator, or other vector arithmetic
 in this milestone.
+
+The same engine also implements the separate experimental sparse scalar-result
+operation documented in [VSDOT8](vector_vsdot8.md); it does not add a vector
+register or scratchpad owner.

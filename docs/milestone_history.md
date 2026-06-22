@@ -2,6 +2,21 @@
 
 Append completed, human-reviewed milestones below. Pending-review implementation evidence must be explicitly marked and must not imply a commit. Do not reconstruct or invent prior entries.
 
+### Bare-Metal Sparse Kernel and Scalar vs Dense vs Sparse Evaluation — implementation complete, pending human review — 2026-06-23
+
+- Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
+- Summary: added deterministic program generation, independent golden modeling, and actual-pipeline integration for one 16-by-4 quantized fully connected layer in scalar software-multiply, dense `VDOT8`, and 2:4 `VSDOT8` implementations.
+- Tests and measurements: all paths produce `[382,-446,-246,1054]`. Scalar measured 7,399 cycles/3,948 retired instructions and 64 observed software-multiply routine-entry retirements; dense and sparse each measured 484 cycles/109 retired instructions with 16 respective dot retirements and 32 vector loads. Sparse observed 32 executed and 32 skipped multiplications. Storage is 64 dense bytes versus 32 compressed bytes plus 6 packed metadata bytes.
+- Documentation: `docs/architecture/sparse_fc_workload.md` records data layout, lane ordering, metadata packing, and the complete measured/derived comparison table.
+- Known limitations: no compiler backend, no final vector ISA commitment, no pipeline promotion, and no external memory/DMA work.
+
+### Sparse Signed INT8 Dot Product — implementation complete, pending human review — 2026-06-22
+
+- Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
+- Summary: added experimental Custom-0 `VSDOT8` with six 2-of-4 patterns, two compressed signed weights, exact scalar accumulation, precise invalid metadata, and completion-gated two-executed/two-skipped debug events.
+- Tests run: directed patterns report 10 sparse commands and 20 executed/20 skipped multiplications; seed `0x5a17c0de` reports 96 commands and 192/192 events. Reset, redirect, invalid metadata, VDOT8, and vector-memory coverage pass.
+- Known limitations: one four-lane group; no sparse memory, masks, INT16, compiler support, or pipeline promotion.
+
 ### Vector Load/Store and Tightly Coupled Scratchpad — implementation complete, pending human review — 2026-06-22
 
 - Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.

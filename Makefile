@@ -4,7 +4,7 @@ RTL_SOURCES := $(shell find rtl -name '*.sv' | sort)
 SCALAR_TB := tb/integration/tb_scalar_core.sv
 SIM_BUILD := sim/build
 
-.PHONY: help check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline check-scalar-throughput-experiment test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-cpl-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path test-scalar-pipe-vec-stub-all test-vector-regfile test-vector-vadd-directed test-vector-vadd-alias test-vector-vadd-backpressure test-vector-vadd-reset test-vector-vadd-random test-vector-vadd-invalid test-vector-vadd-all test-vector-vdot-directed test-vector-vdot-backpressure test-vector-vdot-reset test-vector-vdot-redirect test-vector-vdot-random test-vector-vdot-invalid test-vector-vdot-all test-vector-scratchpad test-vector-vmem-directed test-vector-vmem-backpressure test-vector-vmem-reset test-vector-vmem-redirect test-vector-vmem-errors test-vector-vmem-random test-vector-vmem-all test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-seed test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative test-scalar-regression test-vector-regression test-full-regression clean
+.PHONY: help check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline check-scalar-throughput-experiment test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-cpl-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path test-scalar-pipe-vec-stub-all test-vector-regfile test-vector-vadd-directed test-vector-vadd-alias test-vector-vadd-backpressure test-vector-vadd-reset test-vector-vadd-random test-vector-vadd-invalid test-vector-vadd-all test-vector-vdot-directed test-vector-vdot-backpressure test-vector-vdot-reset test-vector-vdot-redirect test-vector-vdot-random test-vector-vdot-invalid test-vector-vdot-all test-vector-scratchpad test-vector-vmem-directed test-vector-vmem-backpressure test-vector-vmem-reset test-vector-vmem-redirect test-vector-vmem-errors test-vector-vmem-random test-vector-vmem-all test-vector-vsdot-patterns test-vector-vsdot-directed test-vector-vsdot-backpressure test-vector-vsdot-reset test-vector-vsdot-redirect test-vector-vsdot-invalid test-vector-vsdot-random test-vector-vsdot-all test-workload-encoder test-workload-golden test-workload-scalar test-workload-dense test-workload-sparse test-workload-compare test-workload-all test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-seed test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative test-scalar-regression test-vector-regression test-full-regression clean
 
 help:
 	@printf '%s\n' \
@@ -145,6 +145,50 @@ test-vector-vdot-invalid:
 	$(SIM_BUILD)/tb_vector_vdot_invalid.vvp
 test-vector-vdot-all: test-vector-vdot-directed test-vector-vdot-backpressure test-vector-vdot-reset test-vector-vdot-redirect test-vector-vdot-random test-vector-vdot-invalid
 
+test-vector-vsdot-patterns test-vector-vsdot-directed:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_vector_vsdot -Ptb_vector_vsdot.MODE=0 -o $(SIM_BUILD)/tb_vector_vsdot.vvp $(VEC_VADD_RTL) tb/integration/tb_vector_vsdot.sv
+	$(SIM_BUILD)/tb_vector_vsdot.vvp
+test-vector-vsdot-backpressure:
+	@mkdir -p $(SIM_BUILD)
+	@for mode in 1 2; do iverilog -g2012 -s tb_vector_vsdot -Ptb_vector_vsdot.MODE=$$mode -o $(SIM_BUILD)/tb_vector_vsdot_$$mode.vvp $(VEC_VADD_RTL) tb/integration/tb_vector_vsdot.sv && $(SIM_BUILD)/tb_vector_vsdot_$$mode.vvp || exit $$?; done
+test-vector-vsdot-reset:
+	@mkdir -p $(SIM_BUILD)
+	@for mode in 3 4; do iverilog -g2012 -s tb_vector_vsdot -Ptb_vector_vsdot.MODE=$$mode -o $(SIM_BUILD)/tb_vector_vsdot_$$mode.vvp $(VEC_VADD_RTL) tb/integration/tb_vector_vsdot.sv && $(SIM_BUILD)/tb_vector_vsdot_$$mode.vvp || exit $$?; done
+test-vector-vsdot-redirect:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_vector_vsdot -Ptb_vector_vsdot.MODE=5 -o $(SIM_BUILD)/tb_vector_vsdot_redirect.vvp $(VEC_VADD_RTL) tb/integration/tb_vector_vsdot.sv
+	$(SIM_BUILD)/tb_vector_vsdot_redirect.vvp
+test-vector-vsdot-invalid:
+	@mkdir -p $(SIM_BUILD)
+	@for mode in 6 8; do iverilog -g2012 -s tb_vector_vsdot -Ptb_vector_vsdot.MODE=$$mode -o $(SIM_BUILD)/tb_vector_vsdot_invalid_$$mode.vvp $(VEC_VADD_RTL) tb/integration/tb_vector_vsdot.sv && $(SIM_BUILD)/tb_vector_vsdot_invalid_$$mode.vvp || exit $$?; done
+test-vector-vsdot-random:
+	@mkdir -p $(SIM_BUILD)
+	iverilog -g2012 -s tb_vector_vsdot -Ptb_vector_vsdot.MODE=7 -o $(SIM_BUILD)/tb_vector_vsdot_random.vvp $(VEC_VADD_RTL) tb/integration/tb_vector_vsdot.sv
+	$(SIM_BUILD)/tb_vector_vsdot_random.vvp
+test-vector-vsdot-all: test-vector-vsdot-patterns test-vector-vsdot-directed test-vector-vsdot-backpressure test-vector-vsdot-reset test-vector-vsdot-redirect test-vector-vsdot-invalid test-vector-vsdot-random
+
+WORKLOAD_TB := tb/integration/tb_workload_fc.sv
+test-workload-encoder test-workload-golden:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/workload_fc.py --self-test
+test-workload-scalar:
+	@mkdir -p $(SIM_BUILD)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/workload_fc.py --emit $(SIM_BUILD)
+	iverilog -g2012 -I$(SIM_BUILD) -s tb_workload_fc -Ptb_workload_fc.MODE=0 -o $(SIM_BUILD)/$@.vvp $(VEC_VADD_RTL) $(WORKLOAD_TB)
+	$(SIM_BUILD)/$@.vvp
+test-workload-dense:
+	@mkdir -p $(SIM_BUILD)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/workload_fc.py --emit $(SIM_BUILD)
+	iverilog -g2012 -I$(SIM_BUILD) -s tb_workload_fc -Ptb_workload_fc.MODE=1 -o $(SIM_BUILD)/$@.vvp $(VEC_VADD_RTL) $(WORKLOAD_TB)
+	$(SIM_BUILD)/$@.vvp
+test-workload-sparse:
+	@mkdir -p $(SIM_BUILD)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/workload_fc.py --emit $(SIM_BUILD)
+	iverilog -g2012 -I$(SIM_BUILD) -s tb_workload_fc -Ptb_workload_fc.MODE=2 -o $(SIM_BUILD)/$@.vvp $(VEC_VADD_RTL) $(WORKLOAD_TB)
+	$(SIM_BUILD)/$@.vvp
+test-workload-compare: test-workload-scalar test-workload-dense test-workload-sparse
+test-workload-all: test-workload-encoder test-workload-golden test-workload-compare
+
 VEC_VMEM_TB := tb/integration/tb_vector_vmem.sv
 test-vector-vmem-directed:
 	@mkdir -p $(SIM_BUILD)
@@ -237,7 +281,7 @@ test-scalar-diff-redirect-backpressure:
 # Final scalar correctness suite. Excludes the known expected-fail throughput experiment.
 test-scalar-regression: test-repo test-scalar-directed test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative
 
-test-vector-regression: test-scalar-pipe-vec-stub-all test-vector-vadd-all test-vector-vdot-all test-vector-vmem-all
+test-vector-regression: test-scalar-pipe-vec-stub-all test-vector-vadd-all test-vector-vdot-all test-vector-vmem-all test-vector-vsdot-all test-workload-all
 
 # One final acceptance command after a milestone is stable.
 test-full-regression: test-scalar-regression test-vector-regression lint check docs-check

@@ -55,6 +55,22 @@
   test-full-regression` combines both with Python tests, lint, repository, and
   documentation checks. The expected-failing throughput experiment is excluded.
 
+- VSDOT8 targets: `test-vector-vsdot-patterns`, `test-vector-vsdot-directed`,
+  `test-vector-vsdot-backpressure`, `test-vector-vsdot-reset`,
+  `test-vector-vsdot-redirect`, `test-vector-vsdot-invalid`, and
+  `test-vector-vsdot-random`; aggregate `test-vector-vsdot-all` checks all six
+  legal patterns against independent dense construction, both cause-18 invalid
+  patterns, completion-gated 2 executed/2 skipped events, reset, redirect, and
+  96 random cases (seed `0x5a17c0de`).
+- Bare-metal workload targets: `test-workload-encoder` and
+  `test-workload-golden` validate the reusable RV32I/custom encoders,
+  rejection paths, sparse reconstruction, storage accounting, and output
+  model. `test-workload-{scalar,dense,sparse}` runs the generated 16-input,
+  four-output layer on the real experimental pipeline; `test-workload-compare`
+  and `test-workload-all` require identical outputs, one completion signature,
+  no trap, and exact per-kernel retirement/activity accounting. These bounded
+  tests are included in `test-vector-regression`.
+
 ## Completion rule
 
 A milestone is complete only when every applicable available command named in `docs/current_milestone.md` has passed in the current working tree, or a precise reproducible blocker is reported. Directed tests must verify architectural effects, not merely termination. Review assertions and test changes for weakening or bypasses.

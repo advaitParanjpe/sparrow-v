@@ -9,7 +9,7 @@ implementation recognizes only these test encodings under Custom-0 (`0001011`,
 opcode `0x0b`): `funct3=000` is successful scalar-result stub execution,
 `001` is successful vector-only completion, `010` is exceptional, `011` is
 `VADD8` vector-only completion, `100` is `VDOT8` scalar-result completion,
-`101` is `VLOAD32`, and `110` is `VSTORE32`.
+`101` is `VLOAD32`, `110` is `VSTORE32`, and `111` is `VSDOT8`.
 They are experimental test encodings, not
 the final Sparrow-V ISA.
 
@@ -25,7 +25,7 @@ reset.
 | Field | Width | v1 meaning |
 | --- | ---: | --- |
 | `vec_cmd_valid`, `vec_cmd_ready` | 1, 1 | Command handshake. |
-| `vec_cmd_op_class` | 4 | Experimental operation class. The current pipe maps `funct3` into this field: 0=result stub, 1=vector-only stub, 2=exception stub, 3=VADD8, 4=VDOT8. |
+| `vec_cmd_op_class` | 4 | Experimental operation class. The current pipe maps `funct3` into this field: 0=result stub, 1=vector-only stub, 2=exception stub, 3=VADD8, 4=VDOT8, 7=VSDOT8. |
 | `vec_cmd_funct` | 8 | Opaque function/immediate selector for the later ISA. |
 | `vec_cmd_vs1`, `vec_cmd_vs2`, `vec_cmd_vd` | 5 each | Opaque vector-register indices; their implemented range is deferred. |
 | `vec_cmd_rs1_data`, `vec_cmd_rs2_data` | 32 each | Captured scalar operands. |
@@ -98,6 +98,11 @@ VDOT8 class 4, carries `rs1`/`rs2` as vector sources and `rd` as scalar
 destination, returns a result-valid successful completion, and never writes
 vector state. Its four-lane INT8 behavior and test-only debug ports are
 specified in [vector VADD8](vector_vadd8.md).
+
+`funct3=111` is `VSDOT8`; `vec_cmd_funct[7:5]` transports its metadata. It
+returns a scalar result or precise cause 18 for reserved metadata patterns;
+compressed weights, ordering, and completion-gated accounting are specified in
+[sparse INT8 dot product](vector_vsdot8.md).
 
 ## Implemented vector scratchpad boundary
 

@@ -14,9 +14,9 @@ module tb_vector_vadd #(parameter integer MODE=0);
   logic allow_cmd=1; logic [31:0] mem[0:255]; logic [31:0] initial_v3; integer i, cmds,cpls,vec_retires,vreg_writes,write_index,expected_ops,random_state;
   assign vec_cmd_ready=eng_cmd_ready&&allow_cmd; assign eng_cpl_ready=vec_cpl_ready; assign vec_cpl_valid=eng_cpl_valid;
   rv32_core_pipe #(.VEC_CPL_READY_STALL(MODE==2?5:0)) dut(.*);
-  rv32_vec_vadd_engine #(.LATENCY(3)) engine(.clk,.rst_n,.vec_cmd_valid(vec_cmd_valid&&allow_cmd),.vec_cmd_ready(eng_cmd_ready),.vec_cmd_op_class,.vec_cmd_vs1,.vec_cmd_vs2,.vec_cmd_vd,.vec_cmd_id,.vec_cpl_ready(eng_cpl_ready),.vec_cpl_valid(eng_cpl_valid),.vec_cpl_id,.vec_cpl_status,.vec_cpl_result_valid,.vec_cpl_result_data,.vec_cpl_exception_cause,.busy(),.dbg_we,.dbg_waddr,.dbg_wdata,.dbg_raddr,.dbg_rdata,.dbg_vreg_write_valid,.dbg_vreg_write_addr,.dbg_vreg_write_data);
+  rv32_vec_vadd_engine #(.LATENCY(3)) engine(.clk,.rst_n,.vec_cmd_valid(vec_cmd_valid&&allow_cmd),.vec_cmd_ready(eng_cmd_ready),.vec_cmd_op_class,.vec_cmd_funct,.vec_cmd_vs1,.vec_cmd_vs2,.vec_cmd_vd,.vec_cmd_id,.vec_cpl_ready(eng_cpl_ready),.vec_cpl_valid(eng_cpl_valid),.vec_cpl_id,.vec_cpl_status,.vec_cpl_result_valid,.vec_cpl_result_data,.vec_cpl_exception_cause,.busy(),.dbg_we,.dbg_waddr,.dbg_wdata,.dbg_raddr,.dbg_rdata,.dbg_vreg_write_valid,.dbg_vreg_write_addr,.dbg_vreg_write_data);
   function automatic [31:0] vec(input integer rs2,input integer rs1,input integer rd); vec={7'h00,rs2[4:0],rs1[4:0],3'd3,rd[4:0],7'h0b}; endfunction
-  function automatic [31:0] vec_bad(input integer rs2,input integer rs1,input integer rd); vec_bad={7'h00,rs2[4:0],rs1[4:0],3'd7,rd[4:0],7'h0b}; endfunction
+  function automatic [31:0] vec_bad(input integer rs2,input integer rs1,input integer rd); vec_bad={7'h04,rs2[4:0],rs1[4:0],3'd7,rd[4:0],7'h0b}; endfunction
   function automatic [31:0] jal(input integer off); jal={{11{off[20]}},off[20],off[10:1],off[11],off[19:12],5'd0,7'h6f}; endfunction
   function automatic [31:0] model_add(input [31:0] a,input [31:0] b); integer k; begin for(k=0;k<4;k=k+1) model_add[k*8 +: 8]=a[k*8 +: 8]+b[k*8 +: 8]; end endfunction
   task automatic init_reg(input integer n,input [31:0] value); begin
