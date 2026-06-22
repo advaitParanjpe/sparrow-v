@@ -48,8 +48,8 @@ module rv32_core_pipe #(
   rv32_alu alu(.op(dx_alu_op),.a(dx_a),.b(dx_b),.y(dx_alu_y));
   assign if_lui=if_ins[6:0]==7'h37; assign if_auipc=if_ins[6:0]==7'h17; assign if_opimm=if_ins[6:0]==7'h13; assign if_op=if_ins[6:0]==7'h33;
   // Custom-0 experimental forms: 000=result stub, 001=vector-only stub,
-  // 010=exception stub, 011=VADD8 vector-only engine operation.
-  assign if_vec=(if_ins[6:0]==7'h0b)&&((if_ins[14:12]==3'd0)||(if_ins[14:12]==3'd1)||(if_ins[14:12]==3'd2)||(if_ins[14:12]==3'd3));
+  // 010=exception stub, 011=VADD8 vector-only operation, 100=VDOT8.
+  assign if_vec=(if_ins[6:0]==7'h0b)&&((if_ins[14:12]==3'd0)||(if_ins[14:12]==3'd1)||(if_ins[14:12]==3'd2)||(if_ins[14:12]==3'd3)||(if_ins[14:12]==3'd4));
   assign if_supported=if_lui||if_auipc||if_opimm||if_op||if_branch||if_jal||if_jalr||if_ecall||(if_mem_op!=MEM_NONE)||(if_result_sel==2'd1)||if_vec;
   assign if_uses_rs1=if_opimm||if_op||if_branch||if_jalr||(if_mem_op!=MEM_NONE)||if_vec; assign if_uses_rs2=if_op||if_branch||(if_mem_op==MEM_STORE)||if_vec;
   assign if_illegal=(!if_legal||!if_supported||if_ebreak)&&!if_vec;
@@ -86,7 +86,7 @@ module rv32_core_pipe #(
   // Operand values were captured at IF/DX admission with same-edge MW bypass.
   // Do not recompute them while command-ready applies backpressure.
   assign vec_cmd_rs1_data=vec_cmd_rs1_q; assign vec_cmd_rs2_data=vec_cmd_rs2_q;
-  assign vec_cmd_rs1_valid=1'b1; assign vec_cmd_rs2_valid=1'b1; assign vec_cmd_rd=dx_rd; assign vec_cmd_rd_we=dx_vec_funct3==3'd0; assign vec_cmd_imm={{20{dx_ins[31]}},dx_ins[31:20]}; assign vec_cmd_pc=dx_pc; assign vec_cmd_id=1'b0;
+  assign vec_cmd_rs1_valid=1'b1; assign vec_cmd_rs2_valid=1'b1; assign vec_cmd_rd=dx_rd; assign vec_cmd_rd_we=(dx_vec_funct3==3'd0)||(dx_vec_funct3==3'd4); assign vec_cmd_imm={{20{dx_ins[31]}},dx_ins[31:20]}; assign vec_cmd_pc=dx_pc; assign vec_cmd_id=1'b0;
   assign vec_cmd_fire=vec_cmd_valid&&vec_cmd_ready;
   assign vec_cpl_ready=vec_outstanding&&!mw_v&&!trap_valid&&(vec_cpl_stall_count>=VEC_CPL_READY_STALL);
   assign vec_cpl_fire=vec_cpl_valid&&vec_cpl_ready;
@@ -127,7 +127,7 @@ module rv32_core_pipe #(
       else if(vec_cpl_valid&&vec_cpl_stall_count<VEC_CPL_READY_STALL) vec_cpl_stall_count<=vec_cpl_stall_count+1;
       if(dx_to_mw) begin mw_v<=1;mw_pc<=dx_pc;mw_ins<=dx_ins;mw_rd<=dx_rd;mw_we<=dx_reg_write&&!dx_terminal;mw_y<=dx_y;mw_terminal<=dx_terminal;mw_illegal<=dx_illegal;mw_cause<=dx_cause;mw_mem<=dx_mem&&!dx_terminal;mw_store<=dx_store;mw_mem_size<=dx_mem_size;mw_load_unsigned<=dx_load_unsigned;mw_addr<=dx_mem_addr;mw_wdata<=dx_store_wdata;mw_store_data<=dx_store_data;mw_wstrb<=dx_store_wstrb;mw_mem_state<=0; if(dx_mem&&dx_mem_misaligned)misaligned_memory_ops<=misaligned_memory_ops+1; if(dx_mem&&!dx_store)load_instructions<=load_instructions+1; if(dx_mem&&dx_store)store_instructions<=store_instructions+1;dx_v<=0;end
       if(vec_cmd_fire) begin
-        vec_outstanding<=1; vec_payload_valid<=0; vec_pc_q<=dx_pc; vec_ins_q<=dx_ins; vec_rd_q<=dx_rd; vec_rd_we_q<=dx_vec_funct3==3'd0; dx_v<=0;
+        vec_outstanding<=1; vec_payload_valid<=0; vec_pc_q<=dx_pc; vec_ins_q<=dx_ins; vec_rd_q<=dx_rd; vec_rd_we_q<=(dx_vec_funct3==3'd0)||(dx_vec_funct3==3'd4); dx_v<=0;
       end
       if(dx_v&&dx_vec&&!vec_payload_valid) begin vec_cmd_rs1_q<=dx_a; vec_cmd_rs2_q<=dx_b; vec_payload_valid<=1; end
       // Redirect has priority over IF consumption and response buffering.

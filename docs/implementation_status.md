@@ -29,10 +29,19 @@
   `make test-vector-vadd-all`; the stub coverage is retained. There is still
   no vector-memory interface or sparse implementation; the pipe remains
   experimental and `rv32_core.sv` remains production/reference.
+- The same sole vector-register owner implements experimental Custom-0
+  `funct3=100` `VDOT8 rd, vs1, vs2`: four explicitly signed INT8 products
+  accumulate exactly into a scalar 32-bit completion result. It never writes a
+  vector register; scalar writeback occurs only after completion acceptance.
+  `make test-vector-vdot-all` covers signed extremes, x0, dependent scalar
+  use, command/completion backpressure, reset, redirect suppression, invalid
+  encoding, and 32 deterministic golden-model cases (seed `0x2468ace1`).
 
 ## Planned, not implemented
 
-Vector ISA expansion, vector memory, INT16 lanes, masks/reductions/dot products, 2:4 sparse metadata, scratchpad, formal verification, compiled bare-metal execution, synthesis, FPGA, and ASIC/OpenLane flows.
+Vector ISA expansion, vector memory, INT16 lanes, masks, configurable
+reductions beyond fixed VDOT8, 2:4 sparse metadata, scratchpad, formal
+verification, compiled bare-metal execution, synthesis, FPGA, and ASIC/OpenLane flows.
 
 ## Important sources and commands
 

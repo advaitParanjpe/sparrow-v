@@ -2,6 +2,15 @@
 
 Append completed, human-reviewed milestones below. Pending-review implementation evidence must be explicitly marked and must not imply a commit. Do not reconstruct or invent prior entries.
 
+### Signed INT8 Vector Dot Product — implementation complete, pending human review — 2026-06-22
+
+- Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
+- Summary: extended the single vector-register owner with Custom-0 `funct3=100` `VDOT8 rd, vs1, vs2`; it accumulates four explicit signed INT8 products into a 32-bit scalar completion result and performs no vector write.
+- Key files: `rtl/vector/rv32_vec_vadd_engine.sv`, `rtl/core/rv32_core_pipe.sv`, `tb/integration/tb_vector_vdot.sv`, `Makefile`, and vector/protocol/verification documentation.
+- Tests run and measured results: focused VDOT target covers 32 deterministic random cases with seed `0x2468ace1`, signed extremes, backpressure, reset, redirect, invalid encoding, x0, dependency, and no-vector-write event accounting; `make test-vector-regression` and `make test-full-regression` passed.
+- Known limitations: experimental encoding only; no vector memory, masks, configurable vector length, INT16, saturation, persistent accumulators, formal verification, or pipeline promotion.
+- Follow-up work: human review and commit decision; further vector ISA work requires a separate approved milestone.
+
 ### Vector Register File and 4-Lane INT8 VADD — implementation complete, pending human review — 2026-06-22
 
 - Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.

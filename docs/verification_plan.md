@@ -33,6 +33,14 @@
   matched write per accepted VADD8.
   `test-vector-regfile` and `test-vector-vadd-alias` intentionally select the
   corresponding coverage within the shared directed simulation.
+- VDOT8 targets: `test-vector-vdot-directed`, `test-vector-vdot-backpressure`,
+  `test-vector-vdot-reset`, `test-vector-vdot-redirect`,
+  `test-vector-vdot-random`, and `test-vector-vdot-invalid`; aggregate
+  `test-vector-vdot-all` verifies completion-result scalar writeback and no
+  vector write for signed four-lane INT8 dot products. Directed inputs include
+  zero, signs, `-128 * -128`, `127 * 127`, cancellation, source alias, v0,
+  v31, x0 destination, a dependent ADDI, and consecutive dots. The random
+  model runs 32 cases with seed `0x2468ace1`.
 - Aggregate commands: `make test-scalar-regression` runs the directed,
   focused-pipeline, and differential scalar correctness suite; `make
   test-vector-regression` runs both vector aggregates; and `make

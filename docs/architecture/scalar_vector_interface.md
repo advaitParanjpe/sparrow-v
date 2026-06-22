@@ -7,8 +7,9 @@ experimental integration in `rv32_core_pipe`. It is not a vector ISA.
 `rv32_core.sv` remains unchanged and treats Custom-0 as illegal. The pipe
 implementation recognizes only these test encodings under Custom-0 (`0001011`,
 opcode `0x0b`): `funct3=000` is successful scalar-result stub execution,
-`001` is successful vector-only completion, `010` is exceptional, and `011`
-is `VADD8` vector-only completion. They are experimental test encodings, not
+`001` is successful vector-only completion, `010` is exceptional, `011` is
+`VADD8` vector-only completion, and `100` is `VDOT8` scalar-result completion.
+They are experimental test encodings, not
 the final Sparrow-V ISA.
 
 ## Command channel
@@ -23,7 +24,7 @@ reset.
 | Field | Width | v1 meaning |
 | --- | ---: | --- |
 | `vec_cmd_valid`, `vec_cmd_ready` | 1, 1 | Command handshake. |
-| `vec_cmd_op_class` | 4 | Experimental operation class. The current pipe maps `funct3` into this field: 0=result stub, 1=vector-only stub, 2=exception stub, 3=VADD8. |
+| `vec_cmd_op_class` | 4 | Experimental operation class. The current pipe maps `funct3` into this field: 0=result stub, 1=vector-only stub, 2=exception stub, 3=VADD8, 4=VDOT8. |
 | `vec_cmd_funct` | 8 | Opaque function/immediate selector for the later ISA. |
 | `vec_cmd_vs1`, `vec_cmd_vs2`, `vec_cmd_vd` | 5 each | Opaque vector-register indices; their implemented range is deferred. |
 | `vec_cmd_rs1_data`, `vec_cmd_rs2_data` | 32 each | Captured scalar operands. |
@@ -88,12 +89,14 @@ interface, or sparse logic. Focused targets are
 `test-scalar-pipe-vec-wrong-path`, and aggregate
 `test-scalar-pipe-vec-stub-all`.
 
-The real experimental endpoint is `rtl/vector/rv32_vec_vadd_engine.sv`.
-Custom-0 `funct3=011` maps to operation class 3 and carries `rs1`, `rs2`, and
-`rd` as `vs1`, `vs2`, and `vd`. It returns a result-invalid successful
-completion and commits its vector-register write exactly on completion
-handshake. Its 32x32-bit, four-lane INT8 behavior and test-only debug ports
-are specified in [vector VADD8](vector_vadd8.md).
+The real experimental endpoint is `rtl/vector/rv32_vec_vadd_engine.sv`, the
+sole owner of 32x32-bit vector state. Custom-0 `funct3=011` maps to VADD8
+class 3 and returns a result-invalid successful completion, committing its
+vector-register write exactly on completion handshake. `funct3=100` maps to
+VDOT8 class 4, carries `rs1`/`rs2` as vector sources and `rd` as scalar
+destination, returns a result-valid successful completion, and never writes
+vector state. Its four-lane INT8 behavior and test-only debug ports are
+specified in [vector VADD8](vector_vadd8.md).
 
 ## Initial vector-memory boundary: separate vector memory interface
 
