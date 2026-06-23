@@ -1,678 +1,625 @@
-# Milestone: Scalar vs Dense-Vector vs Sparse-Vector Synthesis and PPA Evaluation
+# Milestone: Final Integration, Documentation, and Portfolio Release
 
 ## Objective
 
-Complete Sparrow-V’s hardware-cost evaluation by synthesizing and comparing three controlled processor configurations:
+Finish Sparrow-V as a complete, reproducible, portfolio-ready processor project without adding new architectural features.
 
-1. scalar baseline;
-2. scalar core with dense-vector support;
-3. scalar core with dense and 2:4 sparse-vector support.
+The milestone must consolidate the existing implementation, verification, software, workload, sensor-export, and synthesis results into one coherent final release.
 
-The milestone must produce reproducible synthesis results and an honest comparison of:
+The final repository must make it easy for a reviewer to understand:
 
-- logic area or cell count;
-- register count;
-- memory contribution;
-- estimated maximum frequency or critical path;
-- timing slack at defined clock targets;
-- estimated dynamic and leakage power where supported;
-- workload latency in cycles;
-- area-normalized throughput;
-- sparse-feature hardware overhead.
+- what Sparrow-V is;
+- why it was built;
+- how the scalar, dense-vector, and sparse-vector paths differ;
+- what was implemented;
+- how it was verified;
+- how to reproduce the primary demonstrations;
+- what the measured results are;
+- what limitations remain;
+- which claims are supported and which are not.
 
-The evaluation must preserve the current verified architecture and workload behavior.
+This milestone is for integration and polish.
 
-This milestone is an implementation-cost study, not a tapeout claim.
+Do not add new ISA operations, processor features, ML functionality, or speculative optimization work.
 
 ## Baseline
 
-The repository currently contains:
+Sparrow-V currently includes:
 
-- `rtl/core/rv32_core.sv` as the unchanged scalar reference core;
-- `rtl/core/rv32_core_pipe.sv` as the experimental scalar/vector integration core;
-- shared scalar/vector command and completion handling;
-- one shared vector register file;
-- one 256-byte vector scratchpad;
+- an RV32I scalar reference core;
+- an experimental pipelined scalar/vector core;
+- a blocking, in-order scalar/vector command-completion interface;
+- a 32 × 32-bit vector register file;
+- a 256-byte vector scratchpad;
 - `VADD8`;
 - signed dense `VDOT8`;
-- signed compressed 2:4 `VSDOT8`;
+- compressed 2:4 signed `VSDOT8`;
 - `VLOAD32` and `VSTORE32`;
-- precise retirement, exception, reset, backpressure, and wrong-path behavior;
-- deterministic synthetic fully connected workload;
-- deterministic 16-sample sensor classification fixture;
-- reproducible model and sample export;
-- scalar, dense-vector, and sparse-vector workload measurements;
-- passing scalar, vector, workload, sensor, lint, and repository checks.
+- precise retirement, exceptions, reset cancellation, backpressure, and wrong-path suppression;
+- deterministic instruction and workload generation;
+- scalar, dense-vector, and sparse-vector fully connected workloads;
+- 16-sample sensor-model deployment;
+- dense and sparse storage and arithmetic accounting;
+- scalar, dense, and sparse synthesis configurations;
+- generic Yosys synthesis and PPA comparison;
+- passing scalar, vector, workload, sensor, lint, documentation, and repository checks.
 
-Current sensor-workload results per sample are:
+Verified headline results include:
 
-- dense: 484 cycles, 109 retired instructions, 16 `VDOT8`;
-- sparse: 484 cycles, 109 retired instructions, 16 `VSDOT8`;
-- sparse: 32 executed and 32 skipped multiplications;
-- dense weight storage: 64 bytes;
-- sparse weight plus metadata storage: 38 bytes.
+### Functional workload
+
+All scalar, dense-vector, and sparse-vector implementations produce:
+
+```text
+[382, -446, -246, 1054]
+```
+
+### Performance
+
+| Metric | Scalar | Dense Vector | Sparse Vector |
+|---|---:|---:|---:|
+| Cycles | 7,399 | 484 | 484 |
+| Retired instructions | 3,948 | 109 | 109 |
+| Dot-product instructions | 0 | 16 VDOT8 | 16 VSDOT8 |
+| Multiplications executed | 64 software multiplies | 64 | 32 |
+| Multiplications skipped | 0 | 0 | 32 |
+
+### Sensor fixture
+
+- 16 deterministic samples;
+- four classes: normal, inner, outer, ball;
+- dense fixture accuracy: 16/16;
+- sparse fixture accuracy: 16/16;
+- prediction disagreements: 0.
+
+These are fixture results, not general dataset-accuracy claims.
+
+### Storage
+
+- dense weights: 64 bytes;
+- sparse compressed weights: 32 bytes;
+- sparse metadata: 6 bytes;
+- sparse total: 38 bytes;
+- reduction including metadata: 40.625%.
+
+### Generic synthesis
+
+Using Yosys 0.66 with generic `cmos2` mapping:
+
+| Configuration | Total Cells |
+|---|---:|
+| Scalar | 14,029 |
+| Dense Vector | 62,928 |
+| Sparse Vector | 65,691 |
+
+Sparse-specific incremental overhead over dense:
+
+```text
+2,763 cells
+4.39%
+```
+
+The vector register file and scratchpad are currently mapped as flip-flops and muxes rather than SRAM macros.
+
+No standard-cell timing, physical implementation, signoff power, or tapeout claim exists.
 
 ## Relevant Context
 
 Read:
 
 - `AGENTS.md`
+- `README.md`
 - `docs/codex_context.md`
 - `docs/current_milestone.md`
-- `docs/architecture/scalar_vector_interface.md`
-- `docs/architecture/vector_vsdot8.md`
-- `docs/architecture/sparse_fc_workload.md`
-- `docs/architecture/sensor_workload_export.md`
 - `docs/implementation_status.md`
 - `docs/verification_plan.md`
-- current Makefile synthesis targets;
-- current source manifests;
-- relevant RTL top-level and vector-engine files;
-- any existing Yosys, OpenLane, or OpenROAD configuration.
+- `docs/milestone_history.md`
+- `docs/source_manifest.md`
+- `docs/architecture/scalar_vector_interface.md`
+- `docs/architecture/vector_vadd8.md`
+- `docs/architecture/vector_vsdot8.md`
+- `docs/architecture/vector_memory.md`
+- `docs/architecture/sparse_fc_workload.md`
+- `docs/architecture/sensor_workload_export.md`
+- `docs/architecture/synthesis_ppa_evaluation.md`
+- relevant Makefile targets;
+- relevant workload, sensor, and PPA scripts;
+- repository tree and tracked files.
 
-Read additional files only when required by a concrete synthesis or reporting issue.
+Read other files only when required to resolve a concrete documentation, reproducibility, or cleanup issue.
 
-## Evaluation Configurations
+## Core Principle
 
-Create three explicit, reproducible build configurations.
+The final repository must tell one coherent story:
 
-### Configuration A — Scalar baseline
+> Sparrow-V is a compact RV32I-based edge processor with a tightly coupled INT8 vector engine and compressed 2:4 structured-sparse execution. It demonstrates exact bare-metal inference, multi-sample model deployment, and scalar-versus-dense-versus-sparse hardware evaluation.
 
-Purpose:
+The final polish must not exaggerate the project into:
 
-- establish the scalar processor hardware baseline.
+- a full RVV processor;
+- a production-ready CPU;
+- a timing-closed ASIC;
+- a tapeout-ready design;
+- a full ML compiler;
+- a general sparse inference framework;
+- a measured-energy result.
 
-Requirements:
+## In Scope
 
-- use the repository’s scalar implementation intended for comparison;
-- exclude vector register file;
-- exclude vector scratchpad;
-- exclude vector execution logic;
-- exclude `VADD8`, `VDOT8`, `VSDOT8`, `VLOAD32`, and `VSTORE32`;
-- include only infrastructure genuinely required by the scalar implementation.
+### 1. Final README
 
-Document which scalar core is used and why.
+Rewrite or substantially polish the README so that it functions as the primary project landing page.
 
-Do not silently compare unrelated microarchitectures without explaining the limitation.
+It must include:
 
-### Configuration B — Dense vector
+1. project title and one-sentence summary;
+2. motivation and architectural question;
+3. major implemented features;
+4. architecture overview;
+5. custom instruction summary;
+6. verification summary;
+7. software and workload flow;
+8. headline results;
+9. reproduction commands;
+10. repository structure;
+11. limitations;
+12. future research directions.
 
-Purpose:
+The README must be readable by:
 
-- measure the hardware cost of dense-vector execution without sparse-specific logic.
+- RTL engineers;
+- CPU/microarchitecture reviewers;
+- hardware-acceleration reviewers;
+- HW–SW co-design reviewers.
 
-Include:
+Avoid excessive implementation detail on the first screen.
 
+### 2. Architecture Overview
+
+Add or polish one final architecture overview document.
+
+It must describe:
+
+- scalar pipeline;
 - scalar/vector interface;
-- shared vector register file;
-- vector scratchpad;
-- `VADD8`;
-- `VDOT8`;
-- `VLOAD32`;
-- `VSTORE32`.
-
-Exclude or compile out:
-
-- `VSDOT8`;
+- vector register file;
+- scratchpad;
+- dense dot-product path;
 - sparse metadata decode;
-- sparse executed/skipped accounting that exists solely for sparse execution.
+- compressed two-weight representation;
+- command/completion flow;
+- scalar result writeback;
+- architectural state ownership.
 
-The dense configuration must remain functionally valid and synthesizable.
+Use consistent naming across all documents.
 
-### Configuration C — Sparse vector
+### 3. Architecture Diagram
 
-Purpose:
+Create one repository-native architecture diagram.
 
-- measure the complete current Sparrow-V architecture.
+Preferred formats:
 
-Include:
+- Mermaid embedded in Markdown;
+- SVG generated from a checked-in source;
+- another text-based reproducible diagram.
 
-- everything in the dense-vector configuration;
-- `VSDOT8`;
-- 2:4 metadata decode;
-- compressed sparse arithmetic;
-- sparse executed/skipped accounting.
+The diagram should show:
 
-This configuration must correspond to the verified sparse workload implementation.
+- scalar pipeline;
+- command interface;
+- vector engine;
+- vector register file;
+- scratchpad;
+- VADD8;
+- VDOT8;
+- VSDOT8;
+- scalar result path;
+- memory/data movement.
 
-## Configuration Mechanism
+Do not depend on a proprietary diagram source that cannot be regenerated.
 
-Use one clean mechanism for selecting configurations.
+### 4. Sparse Dataflow Diagram
 
-Preferred options:
+Add one concise diagram or figure showing:
 
-- SystemVerilog parameters;
-- documented preprocessor defines;
-- separate synthesis wrappers;
-- explicit source manifests.
+- four activation lanes;
+- two compressed weights;
+- 3-bit metadata;
+- selected lane pair;
+- two executed multiplications;
+- two skipped multiplications;
+- signed 32-bit scalar result.
 
-Requirements:
+The mapping between metadata and selected lanes must be clear.
 
-- configuration selection must be deterministic;
-- synthesis commands must make the chosen configuration obvious;
-- no manual RTL editing between runs;
-- no duplicated architectural state;
-- no copied and diverging RTL trees.
+### 5. Final Results Summary
 
-Do not weaken normal simulation defaults or regressions.
+Create one canonical final-results document.
 
-## Functional Preservation
+It must consolidate:
 
-Before collecting synthesis metrics, verify that each configuration is functionally appropriate.
+- scalar/dense/sparse correctness;
+- workload cycle counts;
+- retired instruction counts;
+- multiply accounting;
+- sensor fixture results;
+- storage accounting;
+- generic synthesis counts;
+- incremental sparse overhead;
+- timing and power limitations.
 
-### Scalar baseline
+Avoid duplicating conflicting metrics across many documents.
 
-Run a bounded scalar regression.
+Where older documents contain stale values, correct them.
 
-### Dense vector
+### 6. Reproduction Guide
 
-Run:
+Provide a concise reproducibility guide.
 
-- dense instruction tests;
-- vector-memory tests;
-- dense workload tests;
-- no sparse operation tests.
-
-### Sparse vector
-
-Run:
-
-- complete vector regression;
-- synthetic dense/sparse workload;
-- sensor dense/sparse workload.
-
-If configuration-specific tests are required, add bounded targets.
-
-Do not claim comparable results from a configuration that does not pass its relevant tests.
-
-## Synthesis Flow
-
-Provide a reproducible open-source synthesis flow using Yosys.
-
-At minimum:
-
-- explicit top module;
-- explicit ordered RTL source list;
-- explicit configuration defines or parameters;
-- consistent synthesis script;
-- consistent target technology or generic-cell mapping;
-- generated reports stored under a documented results directory.
-
-Use the same synthesis strategy for all three configurations.
-
-Do not compare one generic synthesis result against one technology-mapped result.
-
-## Technology Basis
-
-Choose and document one primary comparison basis.
-
-Preferred:
-
-### Primary comparison
-
-Yosys generic synthesis:
-
-- generic cell count;
-- flop count;
-- combinational cell count;
-- inferred memory information;
-- logic-depth or timing proxy where available.
-
-### Secondary comparison
-
-Sky130 or another already available open PDK flow, if practical:
-
-- standard-cell area;
-- utilization;
-- setup timing;
-- critical path;
-- power estimate;
-- DRC/LVS status if physical implementation is attempted.
-
-If OpenLane/OpenROAD is unavailable, complete the generic synthesis comparison and clearly record the limitation.
-
-Do not block the entire milestone solely because physical-design tools are not installed.
-
-## Clock and Timing Evaluation
-
-Evaluate timing under consistent constraints.
-
-At minimum use:
-
-- one nominal target, preferably 100 MHz or the repository’s established target;
-- one relaxed target if the nominal target does not close.
-
-Report:
-
-- target clock period;
-- worst slack;
-- estimated critical path;
-- pass/fail timing status;
-- any unclocked or unconstrained path warnings.
-
-Do not claim Fmax directly from one arbitrary target.
-
-If supported, perform a bounded clock sweep to estimate the fastest passing target.
-
-Use the same sweep methodology for dense and sparse configurations.
-
-## Area and Cell Accounting
-
-Report for each configuration:
-
-- total synthesized cells;
-- sequential cells;
-- combinational cells;
-- multiplier-related cells where identifiable;
-- mux-related cells where identifiable;
-- inferred memory count and width;
-- vector register file contribution where identifiable;
-- scratchpad contribution where identifiable;
-- standard-cell area if mapped.
-
-Also derive:
-
-- dense-vector overhead relative to scalar;
-- sparse-vector overhead relative to dense;
-- full sparse-vector overhead relative to scalar.
-
-Use both absolute and percentage values.
-
-## Memory Accounting
-
-The vector scratchpad and vector register file may synthesize differently depending on the tool and target.
-
-Document whether each structure becomes:
-
-- inferred memory;
-- flip-flops and muxes;
-- latch-based memory;
-- technology memory macro;
-- unsupported black box.
-
-Do not present flip-flop-expanded memory area as equivalent to a realistic SRAM macro without qualification.
-
-Where useful, report:
-
-- logic excluding memory;
-- memory bits;
-- total mapped result.
-
-## Power Evaluation
-
-If the flow supports a credible estimate, report:
-
-- total estimated power;
-- dynamic power;
-- leakage power;
-- clock assumptions;
-- switching-activity assumptions;
-- whether activity is vectorless or workload-derived.
-
-If only vectorless estimates are available, label them clearly.
-
-Do not claim measured silicon power or workload energy.
-
-If power estimation is unavailable or unreliable, state that and do not fabricate a value.
-
-## Workload Performance Integration
-
-Combine the existing measured cycle counts with synthesis results.
-
-At minimum report for the synthetic FC workload and sensor workload:
-
-- scalar cycles where available;
-- dense-vector cycles;
-- sparse-vector cycles;
-- target or estimated clock frequency;
-- estimated latency;
-- retired instructions;
-- multiplications executed;
-- multiplications skipped;
-- weight storage.
-
-Clearly distinguish:
-
-- measured RTL cycle counts;
-- synthesis-derived frequency;
-- calculated latency.
-
-## Area-Normalized Metrics
-
-Calculate bounded architecture-comparison metrics.
-
-At minimum:
-
-### Throughput proxy
+At minimum include:
 
 ```text
-1 / workload latency
-```
-
-### Area-normalized throughput proxy
-
-```text
-throughput / synthesized area
-```
-
-If only generic cell count is available, use:
-
-```text
-throughput / generic cell count
-```
-
-and label it as a proxy.
-
-Also report:
-
-- cycle speedup relative to scalar;
-- instruction reduction relative to scalar;
-- sparse arithmetic reduction relative to dense;
-- sparse storage reduction relative to dense;
-- sparse area overhead relative to dense.
-
-Do not combine incomparable technology or configuration results.
-
-## Key Research Observation
-
-The current dense and sparse workloads have equal cycle counts even though sparse execution halves multiplication work.
-
-The milestone must report this honestly.
-
-Investigate only enough to identify the current reason, such as:
-
-- equal fixed execution latency;
-- load count;
-- command/completion latency;
-- scalar accumulation;
-- instruction schedule;
-- vector-engine state-machine behavior.
-
-Do not redesign the architecture in this milestone.
-
-Record the finding as a limitation and a future experimental direction.
-
-## Reproducible Commands
-
-Add stable targets following repository conventions, including equivalents of:
-
-```text
-synth-scalar
-synth-vector-dense
-synth-vector-sparse
-synth-compare
-test-config-scalar
-test-config-dense
-test-config-sparse
-ppa-report
-ppa-all
-```
-
-Exact names may be adjusted.
-
-One aggregate command must regenerate the final comparison reports.
-
-Example:
-
-```text
+make check
+make test-full-regression
+make test-workload-all
+make test-sensor-all
 make ppa-all
 ```
 
-The aggregate target must:
+Explain:
 
-1. validate required tools;
-2. synthesize all three configurations;
-3. extract metrics;
-4. generate a machine-readable report;
-5. generate a human-readable comparison table;
-6. fail clearly on missing or malformed results.
+- prerequisites;
+- expected tools;
+- generated artifacts;
+- ignored output directories;
+- approximate purpose of each command;
+- what successful output should contain.
 
-## Results Artifacts
+Do not provide unsupported installation instructions.
 
-Generate deterministic results under a documented directory, for example:
+### 7. Quick-Start Path
 
-```text
-results/ppa/
-```
+Add a minimal path for a reviewer who wants to validate the project quickly.
 
-Include:
+Preferred sequence:
 
-- raw Yosys reports;
-- source manifests;
-- synthesis logs or concise report extracts;
-- machine-readable JSON or CSV summary;
-- Markdown comparison report;
-- tool-version information;
-- configuration metadata;
-- clock constraints.
+1. repository checks;
+2. one focused vector test;
+3. workload comparison;
+4. sensor comparison;
+5. PPA report generation.
 
-Do not commit huge temporary tool directories or unnecessary intermediate files.
+The quick-start should not require understanding the entire repository first.
 
-Choose and document which result artifacts are tracked.
+### 8. Verification Summary
 
-## Machine-Readable Summary
+Create or polish a final verification summary including:
 
-Generate a JSON or CSV summary containing at least:
+- directed tests;
+- deterministic randomized tests;
+- dense/sparse equivalence;
+- invalid metadata;
+- command backpressure;
+- completion backpressure;
+- reset cancellation;
+- wrong-path suppression;
+- scalar dependencies;
+- vector memory;
+- end-to-end bare-metal programs;
+- sensor multi-sample execution;
+- configuration-specific synthesis checks;
+- full regressions.
 
-- configuration name;
-- top module;
-- defines or parameters;
-- tool version;
-- target technology;
-- target clock;
-- timing slack;
-- cell count;
-- sequential cells;
-- combinational cells;
-- memory bits;
-- mapped area if available;
-- estimated power if available;
-- workload cycles;
-- estimated latency;
-- area-normalized throughput proxy.
+Report actual deterministic seeds and case counts where available.
 
-Repository-relative paths only.
+Do not claim formal verification unless formal tools were actually used.
 
-## Human-Readable Comparison
+### 9. Results Provenance
 
-Produce one primary table:
+For every headline result, identify:
 
-| Metric | Scalar | Dense Vector | Sparse Vector |
-|---|---:|---:|---:|
-| Total cells or area | | | |
-| Sequential cells | | | |
-| Combinational cells | | | |
-| Memory bits | | | |
-| Target clock | | | |
-| Worst slack | | | |
-| Timing status | | | |
-| Estimated power | | | |
-| FC workload cycles | | | |
-| Sensor workload cycles | | | |
-| Retired instructions | | | |
-| Multiplies executed | | | |
-| Multiplies skipped | | | |
-| Weight storage | | | |
-| Area-normalized throughput | | | |
+- source test or script;
+- measurement definition;
+- whether measured or derived;
+- units;
+- configuration;
+- tool version where relevant.
 
-Use `N/A` rather than inventing unavailable values.
+At minimum cover:
 
-## Documentation Requirements
+- 7,399/484/484 cycles;
+- 3,948/109/109 retired instructions;
+- 32 executed and 32 skipped sparse multiplies;
+- 64-byte dense versus 38-byte sparse storage;
+- 14,029/62,928/65,691 generic cell counts;
+- 4.39% sparse-over-dense overhead.
 
-Add a synthesis and PPA evaluation document.
+### 10. Repository Cleanup
+
+Audit the repository for:
+
+- obsolete temporary files;
+- stale generated files;
+- duplicate documentation;
+- dead scripts;
+- abandoned test artifacts;
+- `.DS_Store`;
+- untracked build outputs;
+- broken relative links;
+- stale `.codex/milestone_result.md` references;
+- old result values;
+- misleading comments;
+- inconsistent terminology.
+
+Do not delete files merely because they look old.
+
+Delete or archive only files that are demonstrably obsolete and unreferenced.
+
+### 11. Source Manifest
+
+Update the source manifest so it accurately distinguishes:
+
+- production/reference RTL;
+- experimental pipeline RTL;
+- vector RTL;
+- synthesis wrappers;
+- testbenches;
+- workload scripts;
+- sensor-model assets;
+- documentation;
+- generated/ignored outputs.
+
+### 12. Stable Target Audit
+
+Audit public Make targets.
+
+Ensure stable targets have clear names and no accidental duplication.
+
+At minimum preserve:
+
+- scalar regression;
+- vector regression;
+- full regression;
+- workload tests;
+- sensor tests;
+- PPA generation;
+- lint;
+- repository checks;
+- documentation checks.
+
+Add a concise help target only if it can be done cleanly without broad Makefile restructuring.
+
+### 13. Final Limitations Section
 
 Document:
 
-- all three configurations;
-- exact source and define differences;
-- synthesis flow;
-- tool versions;
-- technology assumptions;
-- clock constraints;
-- memory-inference behavior;
-- area results;
-- timing results;
-- power assumptions;
-- workload integration;
-- area-normalized metrics;
-- sparse overhead;
-- limitations;
-- future optimization opportunities.
+- experimental status of `rv32_core_pipe`;
+- no full RVV;
+- fixed 32-bit vector width;
+- one outstanding vector command;
+- fixed-latency dense and sparse execution;
+- no sparse latency reduction yet;
+- no compressed sparse-load instruction;
+- no SRAM macro mapping;
+- generic synthesis only;
+- no physical timing closure;
+- no measured power;
+- fixture accuracy rather than general model accuracy;
+- no full compiler backend.
 
-Update:
+### 14. Future Research Directions
 
-- `docs/implementation_status.md`;
-- `docs/verification_plan.md`;
-- `docs/milestone_history.md`;
-- README with stable commands and headline results only after validation.
+Include a bounded future-work section covering:
 
-Do not claim signoff readiness, tapeout readiness, or physical closure unless actually achieved.
+- compressed sparse data movement;
+- packed sparse loads;
+- fused sparse operations;
+- latency crossover points;
+- layer-adaptive structured sparsity;
+- hardware-aware pruning;
+- SRAM-backed physical implementation;
+- real dataset expansion;
+- SparrowML integration.
+
+Do not implement these in this milestone.
+
+### 15. Final CV-Ready Project Summary
+
+Add one concise project-summary section suitable for later reuse.
+
+It should state, truthfully:
+
+- what was designed;
+- what was verified;
+- what workload was run;
+- what was measured;
+- the sparse arithmetic/storage benefits;
+- the sparse hardware overhead;
+- the main limitation.
+
+Do not create a resume file unless one already exists in the repository.
 
 ## Out of Scope
 
-Do not implement:
+Do not add:
 
-- new vector instructions;
+- new ISA instructions;
+- new RTL datapaths;
+- new processor stages;
 - sparse-load instructions;
-- fused operations;
-- wider vectors;
+- fused instructions;
 - caches;
 - DMA;
 - AXI;
-- operating system support;
-- compiler backend;
+- wider vectors;
 - new ML models;
-- new training pipeline;
-- timing-driven RTL redesign;
-- broad retiming;
-- floorplan experimentation beyond one bounded baseline;
-- signoff extraction;
-- real silicon power;
-- tapeout claims;
+- model training;
+- ONNX support;
+- compiler IR;
+- GCC or LLVM support;
+- OpenLane/OpenROAD implementation;
+- timing-driven RTL optimization;
+- power estimation;
+- new benchmarks;
+- research experiments;
 - changes to `rtl/core/rv32_core.sv`.
 
-## Focused Validation
+Do not change validated architectural behavior merely to simplify documentation.
 
-Add focused checks for:
+## Consistency Requirements
 
-### Configuration manifests
+All final documents must agree on:
 
-- scalar excludes vector logic;
-- dense excludes sparse logic;
-- sparse includes all intended logic;
-- no testbench or simulation-only files enter synthesis;
-- source order is deterministic.
+- instruction names;
+- vector register count;
+- lane ordering;
+- scratchpad size;
+- metadata encoding;
+- workload dimensions;
+- sample count;
+- class names;
+- cycle counts;
+- retirement counts;
+- multiplication counts;
+- storage values;
+- synthesis counts;
+- sparse overhead;
+- tool versions;
+- limitations.
 
-### Synthesis reports
+Search for stale or conflicting values before completion.
 
-- all expected reports exist;
-- no configuration silently uses the wrong top;
-- no unintended black boxes;
-- no latches unless deliberately documented;
-- no synthesis fatal errors;
-- metrics parse correctly.
+## Link Validation
 
-### Comparison script
+Check every relative Markdown link in:
 
-- handles all three configurations;
-- rejects missing fields;
-- preserves units;
-- calculates percentages correctly;
-- labels unavailable metrics as `N/A`;
-- produces deterministic output.
+- README;
+- architecture documents;
+- implementation status;
+- verification plan;
+- final results documents.
 
-### Functional preservation
+Add a bounded link-checking script only if one does not exist and it can be implemented without external dependencies.
 
-- scalar configuration tests pass;
-- dense configuration tests pass;
-- sparse configuration tests pass;
-- previous workload and sensor tests remain passing.
+Broken links must fail the documentation check.
 
-## Final Acceptance Regression
+## Reproducibility Validation
 
-During development, run only focused configuration and synthesis targets.
-
-After implementation is stable, run once:
+From a clean or effectively clean working tree, verify:
 
 ```text
-make test-config-scalar
-make test-config-dense
-make test-config-sparse
-make ppa-all
+make check
+make test-vector-regression
 make test-workload-all
 make test-sensor-all
-make test-vector-regression
+make ppa-all
 make test-full-regression
 make lint
-make check
 make docs-check
 git diff --check
 ```
 
-If physical-design tools are available, also run the documented bounded physical-flow target.
+If generated PPA results are ignored, confirm regeneration does not modify tracked source files unexpectedly.
+
+## Final Release Readiness
+
+Create a release-readiness checklist covering:
+
+- clean working tree before release;
+- all stable targets passing;
+- README complete;
+- architecture diagrams render;
+- final metrics consistent;
+- no secrets or personal data;
+- no generated junk;
+- no broken links;
+- limitations stated;
+- reproducibility commands documented;
+- repository ready for a version tag.
+
+Do not create a Git tag or GitHub release.
 
 ## Acceptance Criteria
 
 The milestone is complete only when:
 
-1. Three explicit hardware configurations exist.
-2. Scalar, dense-vector, and sparse-vector configurations are reproducible.
-3. No manual RTL editing is required between configurations.
-4. Scalar excludes vector hardware.
-5. Dense includes dense-vector hardware.
-6. Dense excludes sparse-specific hardware.
-7. Sparse includes complete VSDOT8 support.
-8. Relevant functional tests pass for all configurations.
-9. One consistent Yosys synthesis flow exists.
-10. All configurations use the same synthesis methodology.
-11. Source manifests are explicit and deterministic.
-12. Simulation-only files are excluded.
-13. Synthesis succeeds for all three configurations.
-14. No unintended black boxes remain.
-15. Total cell or area metrics are reported.
-16. Sequential and combinational metrics are reported.
-17. Memory bits and inference behavior are reported.
-18. Dense overhead relative to scalar is calculated.
-19. Sparse overhead relative to dense is calculated.
-20. Sparse overhead relative to scalar is calculated.
-21. One consistent clock constraint is used.
-22. Timing results are reported for all configurations.
-23. Timing failures are reported honestly.
-24. Estimated Fmax is not overstated.
-25. Power is reported only if credibly available.
-26. Power assumptions are documented.
-27. Existing workload cycles are integrated.
-28. Estimated workload latency is calculated consistently.
-29. Area-normalized throughput proxy is reported.
-30. Measured and derived values are distinguished.
-31. Equal dense/sparse cycle counts are reported honestly.
-32. The reason for equal latency is identified at a bounded level.
-33. Machine-readable summary exists.
-34. Human-readable comparison exists.
-35. Tool versions are recorded.
-36. Reproduction commands are documented.
-37. Previous synthetic workload remains passing.
-38. Sensor workload remains passing.
-39. Existing scalar and vector regressions remain passing.
-40. No new ISA or broad RTL optimization is added.
-41. `rtl/core/rv32_core.sv` remains unchanged.
-42. Codex creates no commit or push.
-43. `docs/codex_milestone_result.md` is finalized.
+1. README provides a coherent project overview.
+2. README includes motivation, architecture, verification, results, reproduction, and limitations.
+3. One final architecture overview exists.
+4. One architecture diagram exists.
+5. One sparse dataflow diagram exists.
+6. Custom instructions are summarized accurately.
+7. One canonical final-results document exists.
+8. Workload metrics are consistent across all tracked files.
+9. Sensor fixture metrics are consistent across all tracked files.
+10. Storage metrics are consistent across all tracked files.
+11. Synthesis metrics are consistent across all tracked files.
+12. Sparse incremental overhead is reported as 4.39%.
+13. Generic-memory mapping limitations are explicit.
+14. Fixed-latency dense/sparse behavior is explicit.
+15. Results provenance is documented.
+16. Measured and derived metrics are distinguished.
+17. Reproduction commands are documented.
+18. Quick-start commands are documented.
+19. Verification coverage is summarized.
+20. Deterministic seeds and case counts are included where available.
+21. Repository structure is documented.
+22. Source manifest is accurate.
+23. Public Make targets are consistent.
+24. No stale milestone-result path remains.
+25. No `.DS_Store` files remain.
+26. No obsolete generated outputs are tracked unintentionally.
+27. No broken documentation links remain.
+28. No conflicting headline metrics remain.
+29. Limitations are complete and honest.
+30. Future research directions are documented but not implemented.
+31. A release-readiness checklist exists.
+32. The scalar reference core remains unchanged.
+33. All workload and sensor tests pass.
+34. All scalar and vector regressions pass.
+35. PPA report regeneration passes.
+36. Lint passes with only documented non-fatal warnings.
+37. Repository checks pass.
+38. Documentation checks pass.
+39. `git diff --check` passes.
+40. No new architectural functionality is added.
+41. No commit or push occurs.
+42. `docs/codex_milestone_result.md` is finalized.
 
 ## Stop Conditions
 
 Stop for human review only if:
 
-- a clean scalar/dense/sparse configuration split requires major architectural restructuring;
-- the dense and sparse implementations cannot be isolated without duplicating state;
-- synthesis reveals an unintended latch or combinational loop requiring broad RTL redesign;
-- all available synthesis flows fail on valid SystemVerilog despite bounded frontend fixes;
-- timing analysis is impossible because the design lacks a definable clock boundary;
-- the chosen scalar baseline is fundamentally incomparable to the vector configurations;
-- a likely existing functional correctness issue is discovered;
-- physical-flow work would require major RTL redesign.
+- tracked documents contain irreconcilable conflicting metrics;
+- a headline result cannot be reproduced;
+- a public command no longer works;
+- final regression reveals a likely architectural correctness bug;
+- repository cleanup would require deleting uncertain source material;
+- diagrams cannot accurately represent the implemented design;
+- source ownership or licensing is unclear;
+- secret or personal data is discovered.
 
-Ordinary synthesis-script bugs, define problems, parser issues, report extraction bugs, and documentation work are not stop conditions.
+Ordinary documentation edits, broken links, stale metrics, and repository cleanup are not stop conditions.
+
+## Required Documentation
+
+Create or update, as appropriate:
+
+- `README.md`;
+- one final architecture overview;
+- one canonical final-results document;
+- one reproduction guide;
+- one release-readiness checklist;
+- `docs/implementation_status.md`;
+- `docs/verification_plan.md`;
+- `docs/milestone_history.md`;
+- `docs/source_manifest.md`;
+- `docs/codex_context.md`;
+- `docs/codex_milestone_result.md`.
+
+Avoid unnecessary document proliferation.
+
+Prefer updating existing documents over adding duplicates.
 
 ## Required Result File
 
@@ -687,20 +634,15 @@ throughout the run.
 Finalize it with:
 
 - `STATUS: COMPLETE`, `STATUS: FAILED`, or `STATUS: BLOCKED`;
-- configuration definitions;
-- synthesis tool and version;
-- target technology;
-- clock constraints;
-- exact area or cell metrics;
-- timing results;
-- power results or explicit unavailability;
-- workload latency calculations;
-- sparse overhead;
-- area-normalized metrics;
+- final project summary;
+- exact headline metrics;
+- documentation files created or updated;
+- files removed and why;
+- broken links fixed;
+- stale metrics corrected;
 - exact commands and outcomes;
-- changed files;
 - remaining limitations;
-- whether physical implementation was run;
-- confirmation that previous workload and sensor regressions pass;
+- release-readiness verdict;
+- confirmation that no architectural feature was added;
 - confirmation that `rtl/core/rv32_core.sv` is unchanged;
 - confirmation that no commit or push occurred.
