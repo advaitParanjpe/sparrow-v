@@ -1,5 +1,12 @@
 # Milestone history
 
+## External Sensor Workload Interface for SparrowML Integration — implementation complete, pending human review — 2026-06-23
+
+- Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
+- Summary: added a versioned fixed-shape dense/2:4 sparse INT8 manifest, strict validation, isolated deterministic workspace generation, an RTL runner using the existing sensor bench, canonical machine-readable results, parseable status markers, stable Make targets, and source-controlled reproduction manifests.
+- Boundary: no RTL, ISA, or architectural behavior changed; no SparrowML dependency or code was added. The checked-in 16-sample fixture remains the default workflow.
+- Evidence: source-controlled dense and sparse external workloads each report 484 cycles, 109 retired instructions, 32 vector loads, and expected four-accumulator results. Sparse additionally reports 16 sparse dots and 32 measured executed plus 32 measured skipped multiplications; dense's 64 conceptual multiplications are labelled derived.
+
 ## Final Integration, Documentation, and Portfolio Release — 2026-06-23
 
 - Summary: consolidated implemented RTL, deterministic workloads, sensor

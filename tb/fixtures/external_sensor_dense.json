@@ -1,0 +1,16 @@
+{
+  "format_version": "sparrowv_external_sensor_workload_v1",
+  "execution_mode": "dense_int8",
+  "sample_id": "normal_00",
+  "class_names": ["normal", "inner", "outer", "ball"],
+  "input_int8": [20, 0, 0, 0, 20, 0, 0, 0, 20, 0, 0, 0, 20, 0, 0, 0],
+  "biases_int32": [17, -23, 31, -37],
+  "expected_accumulators_int32": [977, 57, -129, 203],
+  "source_package_identity": "sparrow-v-fixture-derived",
+  "dense_weights_int8": [
+    [12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1],
+    [1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2],
+    [-2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3],
+    [3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12]
+  ]
+}

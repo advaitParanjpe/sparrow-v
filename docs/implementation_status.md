@@ -11,7 +11,9 @@
   `VSDOT8`, `VLOAD32`, and `VSTORE32`; successful effects commit on completion
   handshake, while reset and wrong-path work are suppressed.
 - Deterministic scalar/dense/sparse fully connected workload and 16-sample
-  dense/sparse sensor fixture export and execution.
+  dense/sparse sensor fixture export and execution, plus a fixed-shape,
+  versioned external 16-input/four-output dense or 2:4 sparse sensor-workload
+  interface that runs the existing RTL in an isolated workspace.
 - Generic Yosys PPA flow with protected scalar, dense-vector, and sparse-vector
   configurations. Current reproducible totals are 14,029, 62,928, and 65,691
   cells; sparse is 2,763 cells (4.39%) over dense.

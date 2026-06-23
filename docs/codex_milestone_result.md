@@ -1,70 +1,57 @@
 STATUS: COMPLETE
-MILESTONE: Final Integration, Documentation, and Portfolio Release
-COMPLETED_AT: 2026-06-23
+MILESTONE: External Sensor Workload Interface for SparrowML Integration
+STARTED_AT: 2026-06-23T22:29:47Z
 
-SUMMARY
-Completed the documentation-and-release integration without adding RTL or ISA
-functionality. The repository now has a portfolio landing page, Mermaid
-architecture and sparse-dataflow diagrams, canonical results/provenance,
-reproduction guide, release checklist, accurate source manifest, improved
-target help, and repository-wide relative Markdown-link validation.
+## Outcome
 
-HEADLINE_RESULTS
-- All FC paths produce `[382, -446, -246, 1054]`; scalar/dense/sparse measured
-  7,399/484/484 cycles and 3,948/109/109 retired instructions.
-- Sparse FC measured 32 executed and 32 skipped multiplies; dense storage is
-  64 bytes and sparse weight-plus-metadata storage is 38 bytes (40.625%
-  reduction).
-- Sensor fixture: 16/16 correct dense and sparse predictions; zero disagreements.
-- Generic Yosys 0.66 `cmos2` totals: scalar 14,029, dense 62,928, sparse
-  65,691 cells. Sparse adds 2,763 cells (4.39%) over dense.
+Implemented a versioned fixed-shape external sensor-workload interface for the
+existing dense and sparse RTL paths. No RTL, ISA, or architectural behavior was
+changed; `rv32_core` remains untouched. No SparrowML code or dependency was
+added. Existing checked-in fixture commands remain default and pass.
 
-CHANGED_FILES
-- Updated: `README.md`, `Makefile`, `docs/architecture.md`,
-  `docs/architecture/vector_vadd8.md`, `docs/codex_context.md`,
+## Changed files
+
+- `scripts/sensor_workload.py`, `scripts/run_external_sensor_workload.py`,
+  `tb/integration/tb_sensor_workload.sv`, `Makefile`, and `pytest.ini`.
+- `tb/fixtures/external_sensor_dense.json`,
+  `tb/fixtures/external_sensor_sparse.json`, and
+  `tb/tests/test_external_sensor_workload.py`.
+- `README.md`, `docs/architecture/sensor_workload_export.md`,
   `docs/implementation_status.md`, `docs/milestone_history.md`,
-  `docs/source_manifest.md`, `docs/verification_plan.md`, and
-  `scripts/check_repo.py`.
-- Added: `docs/final_results.md`, `docs/reproduction.md`, and
-  `docs/release_readiness.md`.
-- Removed: no files. No stale `.codex/milestone_result.md` reference, tracked
-  generated artifact, or `.DS_Store` file was found.
+  `docs/source_manifest.md`, and `docs/verification_plan.md`.
 
-COMMANDS_AND_OUTCOMES
-- `make test-vector-vsdot-all`: PASS.
-- `make docs-check`: initial FAIL for pre-existing README heading requirements;
-  headings restored, then PASS with repository-wide relative-link validation.
-- `make test-workload-all`: PASS; reported all headline FC measurements.
-- `make test-sensor-all`: PASS; Python export tests and 16 dense plus 16 sparse
-  RTL runs passed.
-- `make ppa-all`: PASS; regenerated ignored `results/ppa/` artifacts.
-- `make test-vector-regression`: PASS.
-- `make test-full-regression`: initial FAIL because the expanded link checker
-  removed a unit-test-imported helper; compatibility wrapper added. Rerun PASS
-  across scalar/vector regression, Python tests, lint, repository, and docs.
-- `make check`: PASS.
-- `make lint`: PASS with documented non-fatal Verilator filename, empty-pin,
-  multi-top, and unused-signal warnings.
-- `make docs-check` (final): PASS.
-- `make help`: PASS; stable target list printed.
-- `git diff --check`: PASS.
+## Verification
 
-KNOWN_WARNINGS_AND_LIMITATIONS
-Icarus emits existing non-fatal `always_*` sensitivity/synthesis-context and
-bounded `$readmemh` image-size warnings. Verilator emits the documented
-non-fatal synthesis-wrapper warnings. `rv32_core_pipe` remains experimental;
-Sparrow-V is not full RVV and has fixed 32-bit vectors, one outstanding vector
-command, fixed dense/sparse latency, no compressed sparse load, no full compiler
-backend, no SRAM macros, no physical timing closure, and no measured power.
-Sensor accuracy is fixture-only. Generic cell counts are not ASIC area, timing,
-or power claims.
+- PASS: `python3 -m compileall scripts python`.
+- PASS: `pytest` (16 tests). Initial collection failed because pytest did not
+  include the repository root; `pytest.ini` now sets `pythonpath = .`.
+- PASS: `make test-sensor-rtl-dense` and `make test-sensor-rtl-sparse` (all
+  existing 16-sample fixture runs).
+- PASS: `make test-sensor-rtl-external-dense` and
+  `make test-sensor-rtl-external-sparse` using source-controlled manifests.
+- PASS: focused external tests cover validation, dimensions, integer ranges,
+  sparse metadata, deterministic/stale workspace behavior, fixture protection,
+  result schema, expected-accumulator assertion reporting, and real RTL runs.
+- PASS: `make check`, `make docs-check`, and `git diff --check`.
+- PASS: `make test-full-regression` once after implementation stability. The
+  subsequent bounded workspace-safety correction was covered by focused
+  external Make targets and pytest; it did not affect RTL or aggregate paths.
 
-RELEASE_READINESS
-Documentation, diagrams, metrics, reproducibility commands, source ownership,
-link validation, and final regression are complete. A human must still review
-the working-tree diff and make any release commit/tag manually.
+## Measurements and result contract
 
-SAFETY_AND_SCOPE
-No architectural feature was added. `rtl/core/rv32_core.sv` is unchanged.
-Generated PPA and simulation artifacts remain ignored. No commit or push
-occurred.
+- Dense external fixture: accumulators `[977, 57, -129, 203]`; 484 cycles;
+  109 retired; 32 measured vector loads; 16 dense dots; 64 derived conceptual
+  INT8 multiplications.
+- Sparse external fixture: accumulators `[977, -23, 31, 203]`; 484 cycles;
+  109 retired; 32 measured vector loads; 16 sparse dots; 32 measured executed
+  and 32 measured skipped INT8 multiplications.
+- `result.json` is versioned as `sparrowv_external_sensor_result_v1`; measured,
+  derived, and unavailable counter states are explicit. Simulation assertion or
+  trap failures write a failure result where workspace generation succeeded.
+
+## Final review
+
+- Diff review: clean (`git diff --check`). No remaining implementation issues.
+- Reference core: unchanged and still protected; experimental pipeline remains
+  unpromoted.
+- Commit safety: no commit or push occurred.

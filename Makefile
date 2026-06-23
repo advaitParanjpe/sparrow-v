@@ -9,7 +9,7 @@ SIM_BUILD := sim/build
 help:
 	@printf '%s\n' \
 	  'Focused vector: test-vector-vsdot-all, test-vector-vadd-all, test-vector-vdot-all, test-vector-vmem-all' \
-	  'Workloads: test-workload-all, test-sensor-all' \
+	  'Workloads: test-workload-all, test-sensor-all, test-sensor-rtl-external-{dense,sparse}' \
 	  'Aggregates: test-scalar-regression, test-vector-regression, test-full-regression' \
 	  'PPA: ppa-all; checks: lint, check, docs-check' \
 	  'Non-blocking expected-fail: check-scalar-throughput-experiment'
@@ -191,6 +191,8 @@ test-workload-compare: test-workload-scalar test-workload-dense test-workload-sp
 test-workload-all: test-workload-encoder test-workload-golden test-workload-compare
 
 SENSOR_WORKLOAD_TB := tb/integration/tb_sensor_workload.sv
+SENSOR_MANIFEST ?=
+SENSOR_WORKSPACE ?= $(SIM_BUILD)/external-sensor
 generate-sensor-workload:
 	@mkdir -p $(SIM_BUILD)
 	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/sensor_workload.py --emit $(SIM_BUILD)
@@ -200,6 +202,10 @@ test-sensor-rtl-dense: generate-sensor-workload
 	@for sample in $$(seq 0 15); do iverilog -g2012 -I$(SIM_BUILD) -s tb_sensor_workload -Ptb_sensor_workload.MODE=1 -Ptb_sensor_workload.SAMPLE=$$sample -o $(SIM_BUILD)/test-sensor-dense_$$sample.vvp $(VEC_VADD_RTL) $(SENSOR_WORKLOAD_TB) && $(SIM_BUILD)/test-sensor-dense_$$sample.vvp || exit $$?; done
 test-sensor-rtl-sparse: generate-sensor-workload
 	@for sample in $$(seq 0 15); do iverilog -g2012 -I$(SIM_BUILD) -s tb_sensor_workload -Ptb_sensor_workload.MODE=2 -Ptb_sensor_workload.SAMPLE=$$sample -o $(SIM_BUILD)/test-sensor-sparse_$$sample.vvp $(VEC_VADD_RTL) $(SENSOR_WORKLOAD_TB) && $(SIM_BUILD)/test-sensor-sparse_$$sample.vvp || exit $$?; done
+test-sensor-rtl-external-dense:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/run_external_sensor_workload.py --manifest $(if $(SENSOR_MANIFEST),$(SENSOR_MANIFEST),tb/fixtures/external_sensor_dense.json) --workspace $(SENSOR_WORKSPACE)
+test-sensor-rtl-external-sparse:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/run_external_sensor_workload.py --manifest $(if $(SENSOR_MANIFEST),$(SENSOR_MANIFEST),tb/fixtures/external_sensor_sparse.json) --workspace $(SENSOR_WORKSPACE)
 test-sensor-workload: test-sensor-export test-sensor-rtl-dense test-sensor-rtl-sparse
 test-sensor-all: test-sensor-workload
 

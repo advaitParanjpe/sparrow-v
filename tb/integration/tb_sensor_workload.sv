@@ -9,7 +9,7 @@ module tb_sensor_workload #(parameter integer MODE=1, parameter integer SAMPLE=0
   logic retire_valid,retire_rd_we,retire_mem_we,retire_trap; logic [31:0] retire_pc,retire_instr,retire_rd_data,retire_mem_addr,retire_mem_data,retire_cause; logic [4:0] retire_rd; logic [3:0] retire_mem_wstrb; logic [63:0] imem_stall_cycles,dmem_stall_cycles,dep_stall_cycles,control_flush_cycles;
   logic vec_cmd_valid,vec_cmd_ready,vec_cpl_valid,vec_cpl_ready,vec_cpl_id; logic [3:0] vec_cmd_op_class; logic [7:0] vec_cmd_funct; logic [4:0] vec_cmd_vs1,vec_cmd_vs2,vec_cmd_vd,vec_cmd_rd; logic [31:0] vec_cmd_rs1_data,vec_cmd_rs2_data,vec_cmd_imm,vec_cmd_pc,vec_cpl_result_data,vec_cpl_exception_cause; logic vec_cmd_rs1_valid,vec_cmd_rs2_valid,vec_cmd_rd_we,vec_cmd_id,vec_cpl_result_valid; logic [1:0] vec_cpl_status;
   logic dbg_we=0,dbg_vreg_write_valid,dbg_spad_we=0,dbg_spad_write_valid,dbg_vsdot_mul_exec_valid,dbg_vsdot_mul_skip_valid; logic [4:0] dbg_waddr=0,dbg_raddr=0,dbg_vreg_write_addr; logic [31:0] dbg_wdata=0,dbg_rdata,dbg_vreg_write_data,dbg_spad_addr=0,dbg_spad_wdata=0,dbg_spad_raddr=0,dbg_spad_rdata,dbg_spad_write_addr,dbg_spad_write_data;
-  logic [31:0] imem[0:SENSOR_WORKLOAD_WORDS-1],dmem[0:511]; integer i,cycles,retired,vdots,vsdots,mul_exec,mul_skip,vloads,vstores,completion_writes,output_writes,prediction; logic done;
+  logic [31:0] imem[0:SENSOR_WORKLOAD_WORDS-1],dmem[0:511]; integer i,cycles,retired,vdots,vsdots,mul_exec,mul_skip,vloads,vstores,completion_writes,output_writes,prediction; logic done; string workspace;
 
   rv32_core_pipe dut(.*);
   rv32_vec_vadd_engine #(.LATENCY(3)) engine(
@@ -38,9 +38,10 @@ module tb_sensor_workload #(parameter integer MODE=1, parameter integer SAMPLE=0
 
   initial begin
     if(SAMPLE<0||SAMPLE>=SENSOR_SAMPLE_COUNT||(MODE!=1&&MODE!=2)) $fatal(1,"invalid sensor parameters");
+    if(!$value$plusargs("SENSOR_WORKSPACE=%s",workspace)) workspace="sim/build";
     for(i=0;i<SENSOR_WORKLOAD_WORDS;i=i+1) imem[i]=32'h00000013; for(i=0;i<512;i=i+1) dmem[i]=0;
-    if(MODE==1) $readmemh("sim/build/sensor_dense.mem",imem); else $readmemh("sim/build/sensor_sparse.mem",imem);
-    $readmemh($sformatf("sim/build/sensor_dmem_%0d.mem",SAMPLE),dmem);
+    if(MODE==1) $readmemh({workspace,"/sensor_dense.mem"},imem); else $readmemh({workspace,"/sensor_sparse.mem"},imem);
+    $readmemh($sformatf("%s/sensor_dmem_%0d.mem",workspace,SAMPLE),dmem);
     imem_req_ready=0; repeat(3) @(posedge clk); rst_n=1; preload_spad(); imem_req_ready=1;
     repeat(5000) begin @(posedge clk); if(done) begin
       @(posedge clk);

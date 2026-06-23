@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and export the deterministic Sparrow-V sensor fixture."""
+"""Validate and export deterministic or externally supplied sensor workloads."""
 from __future__ import annotations
 
 import argparse
@@ -179,9 +179,9 @@ def evaluate(model: dict[str, Any], sample_set: dict[str, Any]) -> dict[str, Any
     return {"accuracy_label": "fixture accuracy (deterministic deployment fixture; not general model accuracy)", "samples": records, "summary": {"sample_count": total, "dense_correct": dense_correct, "dense_accuracy": dense_correct / total, "sparse_correct": sparse_correct, "sparse_accuracy": sparse_correct / total, "prediction_disagreements": sum(a["dense_predicted_class"] != a["sparse_predicted_class"] for a in records), "per_class": counts}}
 
 
-def vector_program(model: dict[str, Any], sparse: bool) -> list[int]:
+def vector_program(model: dict[str, Any], sparse: bool, sparse_data: dict[str, Any] | None = None) -> list[int]:
     p = fc.Program(); p.emit(fc.addi(3, 0, fc.DMEM_OUT)); p.emit(fc.addi(4, 0, fc.DMEM_DONE))
-    converted = sparse_model(model)
+    converted = sparse_data if sparse_data is not None else sparse_model(model)
     for output, bias in enumerate(model["bias_int32"]):
         fc.check_imm(bias, 12); p.emit(fc.addi(5, 0, bias))
         for group in range(4):
@@ -206,7 +206,11 @@ def pack_metadata(codes: list[int]) -> list[int]:
 
 
 def spad_words(model: dict[str, Any], features: list[int]) -> list[int]:
-    sparse = sparse_model(model); words = [0] * 64
+    return spad_words_with_sparse(model, features, sparse_model(model))
+
+
+def spad_words_with_sparse(model: dict[str, Any], features: list[int], sparse: dict[str, Any]) -> list[int]:
+    words = [0] * 64
     for group in range(4): words[group] = fc.pack_word(features[group * 4:group * 4 + 4])
     for output, row in enumerate(model["weights_int8"]):
         for group in range(4): words[4 + output * 4 + group] = fc.pack_word(row[group * 4:group * 4 + 4])
@@ -269,6 +273,137 @@ def export(out: Path) -> dict[str, Any]:
     return report
 
 
+EXTERNAL_FORMAT = "sparrowv_external_sensor_workload_v1"
+EXTERNAL_RESULT_FORMAT = "sparrowv_external_sensor_result_v1"
+
+
+def _matrix(value: Any, name: str, rows: int, columns: int, lower: int, upper: int) -> list[list[int]]:
+    if not isinstance(value, list) or len(value) != rows:
+        raise ValueError(f"{name} must contain exactly {rows} rows")
+    result = []
+    for row_index, row in enumerate(value):
+        if not isinstance(row, list) or len(row) != columns:
+            raise ValueError(f"{name}[{row_index}] must contain exactly {columns} values")
+        result.append([_integer(item, f"{name}[{row_index}][{column_index}]", lower, upper)
+                       for column_index, item in enumerate(row)])
+    return result
+
+
+def load_external_manifest(path: Path) -> dict[str, Any]:
+    """Validate the fixed external 16x4 sensor-workload interchange format."""
+    manifest = _load_json(path)
+    if not isinstance(manifest, dict) or manifest.get("format_version") != EXTERNAL_FORMAT:
+        raise ValueError(f"format_version must be {EXTERNAL_FORMAT}")
+    mode = manifest.get("execution_mode")
+    if mode not in {"dense_int8", "sparse_2of4_int8"}:
+        raise ValueError("execution_mode must be dense_int8 or sparse_2of4_int8")
+    sample_id = manifest.get("sample_id")
+    if not isinstance(sample_id, str) or not sample_id:
+        raise ValueError("sample_id must be a nonempty string")
+    class_names = manifest.get("class_names")
+    if (not isinstance(class_names, list) or len(class_names) != 4 or
+            any(not isinstance(name, str) or not name for name in class_names) or len(set(class_names)) != 4):
+        raise ValueError("class_names must contain exactly four unique nonempty strings")
+    features = manifest.get("input_int8")
+    if not isinstance(features, list) or len(features) != 16:
+        raise ValueError("input_int8 must contain exactly 16 values")
+    features = [_integer(value, f"input_int8[{index}]", INT8_MIN, INT8_MAX) for index, value in enumerate(features)]
+    biases = manifest.get("biases_int32")
+    if not isinstance(biases, list) or len(biases) != 4:
+        raise ValueError("biases_int32 must contain exactly four values")
+    biases = [_integer(value, f"biases_int32[{index}]", INT32_MIN, INT32_MAX) for index, value in enumerate(biases)]
+    expected = manifest.get("expected_accumulators_int32")
+    if expected is not None:
+        if not isinstance(expected, list) or len(expected) != 4:
+            raise ValueError("expected_accumulators_int32 must contain exactly four values")
+        expected = [_integer(value, f"expected_accumulators_int32[{index}]", INT32_MIN, INT32_MAX) for index, value in enumerate(expected)]
+    source_identity = manifest.get("source_package_identity")
+    if source_identity is not None:
+        if not isinstance(source_identity, str) or not source_identity or Path(source_identity).is_absolute():
+            raise ValueError("source_package_identity must be a nonempty non-absolute identifier")
+    normalized: dict[str, Any] = {"format_version": EXTERNAL_FORMAT, "execution_mode": mode,
+        "sample_id": sample_id, "class_names": class_names, "input_int8": features,
+        "biases_int32": biases, "expected_accumulators_int32": expected,
+        "source_package_identity": source_identity}
+    if mode == "dense_int8":
+        normalized["dense_weights_int8"] = _matrix(manifest.get("dense_weights_int8"), "dense_weights_int8", 4, 16, INT8_MIN, INT8_MAX)
+    else:
+        compressed = manifest.get("compressed_weights_int8")
+        if not isinstance(compressed, list) or len(compressed) != 4:
+            raise ValueError("compressed_weights_int8 must contain exactly four output rows")
+        compressed_rows = []
+        for output, groups in enumerate(compressed):
+            compressed_rows.append(_matrix(groups, f"compressed_weights_int8[{output}]", 4, 2, INT8_MIN, INT8_MAX))
+        metadata = _matrix(manifest.get("sparse_metadata"), "sparse_metadata", 4, 4, 0, 5)
+        normalized["compressed_weights_int8"] = compressed_rows
+        normalized["sparse_metadata"] = metadata
+    return normalized
+
+
+def _external_svh(spad: list[int], accumulators: list[int]) -> str:
+    lines = ["// Generated external workload; do not edit.", "localparam integer SENSOR_SAMPLE_COUNT = 1;", "localparam integer SENSOR_WORKLOAD_WORDS = 8192;",
+             "function automatic logic [31:0] sensor_spad_word(input integer sample, input integer word); begin sensor_spad_word=32'h00000000; if(sample==0) case(word)"]
+    for word, value in enumerate(spad[:36]):
+        lines.append(f"{word}: sensor_spad_word=32'h{value:08x};")
+    lines += ["endcase end endfunction", "function automatic logic signed [31:0] sensor_expected_logit(input integer sample, input integer mode, input integer output_index); begin sensor_expected_logit=0; if(sample==0) case(output_index)"]
+    for output, value in enumerate(accumulators):
+        literal = f"-32'sd{-value}" if value < 0 else f"32'sd{value}"
+        lines.append(f"{output}: sensor_expected_logit={literal};")
+    lines += ["endcase end endfunction", "function automatic integer sensor_expected_prediction(input integer sample, input integer mode); begin sensor_expected_prediction=0;"]
+    lines.append(f"if(sample==0) sensor_expected_prediction={argmax(accumulators)};")
+    lines += ["end endfunction"]
+    return "\n".join(lines) + "\n"
+
+
+def _external_workspace(path: Path) -> Path:
+    workspace = path.resolve()
+    fixture_dir = (ROOT / "python/sparrowv_model").resolve()
+    sim_build = (ROOT / "sim/build").resolve()
+    if (workspace == ROOT or workspace == fixture_dir or fixture_dir in workspace.parents or
+            (ROOT in workspace.parents and workspace != sim_build and sim_build not in workspace.parents)):
+        raise ValueError("workspace inside the repository must be below sim/build and must not be a checked-in fixture directory")
+    workspace.mkdir(parents=True, exist_ok=True)
+    return workspace
+
+
+def export_external(manifest_path: Path, workspace_path: Path) -> dict[str, Any]:
+    """Emit one external workload entirely below an explicitly supplied workspace."""
+    workload = load_external_manifest(manifest_path)
+    workspace = _external_workspace(workspace_path)
+    for filename in ("sensor_dense.mem", "sensor_sparse.mem", "sensor_dmem_0.mem", "sensor_expected.svh",
+                     "external_workload.json", "result.json", "sensor_external.vvp"):
+        generated = workspace / filename
+        if generated.is_file():
+            generated.unlink()
+    mode = workload["execution_mode"]
+    if mode == "dense_int8":
+        weights = workload["dense_weights_int8"]
+        sparse = sparse_model({"weights_int8": weights, "input_features": 16})
+        accumulators = infer(workload["input_int8"], weights, workload["biases_int32"])
+    else:
+        sparse = {"compressed_weights": workload["compressed_weights_int8"], "metadata": workload["sparse_metadata"]}
+        weights = [sum((decompress_group(group, code) for group, code in zip(groups, codes)), [])
+                   for groups, codes in zip(sparse["compressed_weights"], sparse["metadata"])]
+        sparse["dense_equivalent"] = weights
+        accumulators = infer_compressed(workload["input_int8"], sparse, workload["biases_int32"])
+    model = {"weights_int8": weights, "bias_int32": workload["biases_int32"]}
+    program = vector_program(model, mode == "sparse_2of4_int8", sparse)
+    _write_mem(workspace / ("sensor_sparse.mem" if mode == "sparse_2of4_int8" else "sensor_dense.mem"), program, 8192)
+    dmem = [0] * 512
+    for lane, value in enumerate(workload["input_int8"]):
+        dmem[lane // 4] |= (value & 0xff) << (8 * (lane % 4))
+    _write_mem(workspace / "sensor_dmem_0.mem", dmem, 512)
+    checking_accumulators = workload["expected_accumulators_int32"] or accumulators
+    (workspace / "sensor_expected.svh").write_text(_external_svh(spad_words_with_sparse(model, workload["input_int8"], sparse), checking_accumulators))
+    emitted = {"format_version": EXTERNAL_FORMAT, "execution_mode": mode, "sample_id": workload["sample_id"],
+               "class_names": workload["class_names"], "computed_accumulators_int32": accumulators,
+               "expected_accumulators_int32": workload["expected_accumulators_int32"],
+               "source_package_identity": workload["source_package_identity"],
+               "generated_files": sorted(path.name for path in workspace.iterdir() if path.is_file())}
+    (workspace / "external_workload.json").write_text(json.dumps(emitted, indent=2, sort_keys=True) + "\n")
+    return emitted
+
+
 def self_test() -> None:
     model, samples = load_model(), load_samples(load_model())
     report = evaluate(model, samples); assert len(report["samples"]) == 16
@@ -277,7 +412,18 @@ def self_test() -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(); parser.add_argument("--emit", type=Path); parser.add_argument("--self-test", action="store_true")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--emit", nargs="?", type=Path, const=Path("."), help="emit fixture artifacts, or use with --external-manifest and --workspace")
+    parser.add_argument("--external-manifest", type=Path, help="versioned external sensor workload manifest")
+    parser.add_argument("--workspace", type=Path, help="explicit directory for external generated artifacts")
+    parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
     if args.self_test: self_test()
-    if args.emit: export(args.emit)
+    if args.external_manifest:
+        if args.workspace is None or args.emit is None:
+            parser.error("--external-manifest requires --workspace and --emit")
+        export_external(args.external_manifest, args.workspace)
+    elif args.workspace is not None:
+        parser.error("--workspace requires --external-manifest")
+    elif args.emit:
+        export(args.emit)

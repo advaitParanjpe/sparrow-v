@@ -102,6 +102,12 @@ each dense and sparse mode.
   and `test-sensor-rtl-sparse` independently run all 16 generated fixture
   samples on `rv32_core_pipe`; `test-sensor-workload` aggregates them and is
   included in `test-vector-regression`.
+- External sensor-interface tests validate dense/sparse fixed dimensions, INT8
+  and INT32 bounds, legal sparse metadata, deterministic isolated-workspace
+  generation, fixture preservation, versioned JSON results, and dense/sparse
+  real RTL execution. `test-sensor-rtl-external-dense` and
+  `test-sensor-rtl-external-sparse` accept `SENSOR_MANIFEST` and
+  `SENSOR_WORKSPACE` overrides and default to source-controlled manifests.
 
 ## Completion rule
 

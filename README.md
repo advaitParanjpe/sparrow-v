@@ -82,6 +82,16 @@ through dense and sparse RTL; both paths classify all 16 fixture samples
 correctly, with zero disagreements. This is fixture accuracy, not a dataset
 accuracy claim.
 
+SparrowML or another external producer can instead supply one fixed-shape
+versioned INT8 sensor manifest without adding a dependency to this repository.
+The external interface accepts only 16 inputs and one four-output dense or 2:4
+sparse layer, writes all artifacts below an explicit workspace, and returns a
+canonical `result.json`. Run `make test-sensor-rtl-external-dense
+SENSOR_MANIFEST=/path/workload.json SENSOR_WORKSPACE=/path/workspace` or the
+corresponding `test-sensor-rtl-external-sparse` target. The complete manifest,
+workspace, counter, and reproduction contract is in the [sensor workload
+export documentation](docs/architecture/sensor_workload_export.md).
+
 ## Headline implementation-cost result
 
 Generic Yosys 0.66 `cmos2` mapping reports 14,029 scalar, 62,928 dense-vector,

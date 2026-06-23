@@ -15,7 +15,7 @@ This manifest distinguishes tracked source from reproducible generated output.
 - Integration testbenches: [`tb/integration/`](../tb/integration/), including scalar, differential, vector, workload, and sensor benches.
 - Python unit/repository tests: [`tb/tests/`](../tb/tests/); independent RV32I helper: [`python/verification/rv32i_reference.py`](../python/verification/rv32i_reference.py).
 - Workload encoder and golden model: [`scripts/workload_fc.py`](../scripts/workload_fc.py).
-- Sensor export: [`scripts/sensor_workload.py`](../scripts/sensor_workload.py), with checked-in deterministic fixture assets in [`python/sparrowv_model/`](../python/sparrowv_model/).
+- Sensor export: [`scripts/sensor_workload.py`](../scripts/sensor_workload.py), external RTL runner [`scripts/run_external_sensor_workload.py`](../scripts/run_external_sensor_workload.py), checked-in deterministic fixture assets in [`python/sparrowv_model/`](../python/sparrowv_model/), and external-interface test manifests in [`tb/fixtures/`](../tb/fixtures/).
 - PPA flow and repository checks: [`scripts/ppa_flow.py`](../scripts/ppa_flow.py) and [`scripts/check_repo.py`](../scripts/check_repo.py).
 
 ## Documentation
