@@ -1,648 +1,370 @@
-# Milestone: Final Integration, Documentation, and Portfolio Release
+# Milestone: External Sensor Workload Interface for SparrowML Integration
 
 ## Objective
 
-Finish Sparrow-V as a complete, reproducible, portfolio-ready processor project without adding new architectural features.
+Add a small, documented, source-controlled external-workload interface to Sparrow-V so another repository can execute the existing dense and sparse sensor RTL paths using externally supplied model and sample data.
 
-The milestone must consolidate the existing implementation, verification, software, workload, sensor-export, and synthesis results into one coherent final release.
+This milestone must:
 
-The final repository must make it easy for a reviewer to understand:
+1. preserve the existing checked-in sensor fixture workflow;
+2. accept an external 16-feature INT8 sample;
+3. accept an external dense INT8 `Linear(16, 4)` model;
+4. accept an external compressed 2:4 INT8 `Linear(16, 4)` model;
+5. generate all testbench inputs in an isolated workspace;
+6. invoke the existing dense and sparse RTL simulation paths;
+7. emit machine-readable architectural results and counters;
+8. make no RTL, ISA, or architectural behavior changes;
+9. provide stable commands for SparrowML to invoke later.
 
-- what Sparrow-V is;
-- why it was built;
-- how the scalar, dense-vector, and sparse-vector paths differ;
-- what was implemented;
-- how it was verified;
-- how to reproduce the primary demonstrations;
-- what the measured results are;
-- what limitations remain;
-- which claims are supported and which are not.
+This is an integration-interface milestone, not a new workload, model-training, compiler, or RTL-design milestone.
 
-This milestone is for integration and polish.
+## Current Existing Interfaces
 
-Do not add new ISA operations, processor features, ML functionality, or speculative optimization work.
+The existing Sparrow-V repository already provides:
 
-## Baseline
+- `make test-sensor-rtl-dense`
+- `make test-sensor-rtl-sparse`
+- `scripts/sensor_workload.py`
+- `tb/integration/tb_sensor_workload.sv`
+- checked-in fixture files under `python/sparrowv_model/`
 
-Sparrow-V currently includes:
+The current workflow always consumes the Sparrow-V-owned fixture.
 
-- an RV32I scalar reference core;
-- an experimental pipelined scalar/vector core;
-- a blocking, in-order scalar/vector command-completion interface;
-- a 32 × 32-bit vector register file;
-- a 256-byte vector scratchpad;
-- `VADD8`;
-- signed dense `VDOT8`;
-- compressed 2:4 signed `VSDOT8`;
-- `VLOAD32` and `VSTORE32`;
-- precise retirement, exceptions, reset cancellation, backpressure, and wrong-path suppression;
-- deterministic instruction and workload generation;
-- scalar, dense-vector, and sparse-vector fully connected workloads;
-- 16-sample sensor-model deployment;
-- dense and sparse storage and arithmetic accounting;
-- scalar, dense, and sparse synthesis configurations;
-- generic Yosys synthesis and PPA comparison;
-- passing scalar, vector, workload, sensor, lint, documentation, and repository checks.
+Preserve all current commands and results.
 
-Verified headline results include:
+## Repository Boundary
 
-### Functional workload
+Sparrow-V owns:
 
-All scalar, dense-vector, and sparse-vector implementations produce:
+- RTL execution;
+- testbench behavior;
+- instruction semantics;
+- architectural counters;
+- workload file generation required by the testbench.
 
-```text
-[382, -446, -246, 1054]
-```
+External tools own:
 
-### Performance
+- model training;
+- quantization;
+- pruning;
+- deployment-package production;
+- expected-output calculation.
 
-| Metric | Scalar | Dense Vector | Sparse Vector |
-|---|---:|---:|---:|
-| Cycles | 7,399 | 484 | 484 |
-| Retired instructions | 3,948 | 109 | 109 |
-| Dot-product instructions | 0 | 16 VDOT8 | 16 VSDOT8 |
-| Multiplications executed | 64 software multiplies | 64 | 32 |
-| Multiplications skipped | 0 | 0 | 32 |
+This milestone must not copy SparrowML code into Sparrow-V.
 
-### Sensor fixture
+## Supported External Model Scope
 
-- 16 deterministic samples;
-- four classes: normal, inner, outer, ball;
-- dense fixture accuracy: 16/16;
-- sparse fixture accuracy: 16/16;
-- prediction disagreements: 0.
+Support exactly:
 
-These are fixture results, not general dataset-accuracy claims.
+### Dense
 
-### Storage
+- input: 16 signed INT8 features;
+- weights: shape `[4, 16]`, signed INT8;
+- biases: four signed INT32 values;
+- four output accumulators;
+- existing dense dot-product execution path.
 
-- dense weights: 64 bytes;
-- sparse compressed weights: 32 bytes;
-- sparse metadata: 6 bytes;
-- sparse total: 38 bytes;
-- reduction including metadata: 40.625%.
+### Sparse
 
-### Generic synthesis
+- input: 16 signed INT8 features;
+- compressed weights: 32 signed INT8 values;
+- metadata: 16 legal three-bit 2:4 codes;
+- biases: four signed INT32 values;
+- four output accumulators;
+- existing sparse dot-product execution path.
 
-Using Yosys 0.66 with generic `cmos2` mapping:
+Do not add arbitrary dimensions, layers, dynamic shapes, new operators, or general model support.
 
-| Configuration | Total Cells |
-|---|---:|
-| Scalar | 14,029 |
-| Dense Vector | 62,928 |
-| Sparse Vector | 65,691 |
+## External Input Contract
 
-Sparse-specific incremental overhead over dense:
+Define a versioned input manifest, preferably JSON:
 
 ```text
-2,763 cells
-4.39%
+sparrowv_external_sensor_workload_v1
 ```
-
-The vector register file and scratchpad are currently mapped as flip-flops and muxes rather than SRAM macros.
-
-No standard-cell timing, physical implementation, signoff power, or tapeout claim exists.
-
-## Relevant Context
-
-Read:
-
-- `AGENTS.md`
-- `README.md`
-- `docs/codex_context.md`
-- `docs/current_milestone.md`
-- `docs/implementation_status.md`
-- `docs/verification_plan.md`
-- `docs/milestone_history.md`
-- `docs/source_manifest.md`
-- `docs/architecture/scalar_vector_interface.md`
-- `docs/architecture/vector_vadd8.md`
-- `docs/architecture/vector_vsdot8.md`
-- `docs/architecture/vector_memory.md`
-- `docs/architecture/sparse_fc_workload.md`
-- `docs/architecture/sensor_workload_export.md`
-- `docs/architecture/synthesis_ppa_evaluation.md`
-- relevant Makefile targets;
-- relevant workload, sensor, and PPA scripts;
-- repository tree and tracked files.
-
-Read other files only when required to resolve a concrete documentation, reproducibility, or cleanup issue.
-
-## Core Principle
-
-The final repository must tell one coherent story:
-
-> Sparrow-V is a compact RV32I-based edge processor with a tightly coupled INT8 vector engine and compressed 2:4 structured-sparse execution. It demonstrates exact bare-metal inference, multi-sample model deployment, and scalar-versus-dense-versus-sparse hardware evaluation.
-
-The final polish must not exaggerate the project into:
-
-- a full RVV processor;
-- a production-ready CPU;
-- a timing-closed ASIC;
-- a tapeout-ready design;
-- a full ML compiler;
-- a general sparse inference framework;
-- a measured-energy result.
-
-## In Scope
-
-### 1. Final README
-
-Rewrite or substantially polish the README so that it functions as the primary project landing page.
 
 It must include:
 
-1. project title and one-sentence summary;
-2. motivation and architectural question;
-3. major implemented features;
-4. architecture overview;
-5. custom instruction summary;
-6. verification summary;
-7. software and workload flow;
-8. headline results;
-9. reproduction commands;
-10. repository structure;
-11. limitations;
-12. future research directions.
+- format version;
+- execution mode: `dense_int8` or `sparse_2of4_int8`;
+- sample ID;
+- class names;
+- input INT8 values;
+- dense weights or compressed sparse weights;
+- sparse metadata when applicable;
+- INT32 biases;
+- optional expected accumulators for testbench self-checking;
+- optional source package identity.
 
-The README must be readable by:
+Validate:
 
-- RTL engineers;
-- CPU/microarchitecture reviewers;
-- hardware-acceleration reviewers;
-- HW–SW co-design reviewers.
+- exactly 16 inputs;
+- exactly 64 dense weights;
+- exactly 32 sparse weights;
+- exactly 16 sparse metadata values;
+- exactly four biases;
+- signed integer ranges;
+- legal metadata values only;
+- no absolute-path requirements inside the manifest.
 
-Avoid excessive implementation detail on the first screen.
+## CLI
 
-### 2. Architecture Overview
+Extend the existing workload generator or add a narrowly scoped script.
 
-Add or polish one final architecture overview document.
+Preferred interface:
 
-It must describe:
-
-- scalar pipeline;
-- scalar/vector interface;
-- vector register file;
-- scratchpad;
-- dense dot-product path;
-- sparse metadata decode;
-- compressed two-weight representation;
-- command/completion flow;
-- scalar result writeback;
-- architectural state ownership.
-
-Use consistent naming across all documents.
-
-### 3. Architecture Diagram
-
-Create one repository-native architecture diagram.
-
-Preferred formats:
-
-- Mermaid embedded in Markdown;
-- SVG generated from a checked-in source;
-- another text-based reproducible diagram.
-
-The diagram should show:
-
-- scalar pipeline;
-- command interface;
-- vector engine;
-- vector register file;
-- scratchpad;
-- VADD8;
-- VDOT8;
-- VSDOT8;
-- scalar result path;
-- memory/data movement.
-
-Do not depend on a proprietary diagram source that cannot be regenerated.
-
-### 4. Sparse Dataflow Diagram
-
-Add one concise diagram or figure showing:
-
-- four activation lanes;
-- two compressed weights;
-- 3-bit metadata;
-- selected lane pair;
-- two executed multiplications;
-- two skipped multiplications;
-- signed 32-bit scalar result.
-
-The mapping between metadata and selected lanes must be clear.
-
-### 5. Final Results Summary
-
-Create one canonical final-results document.
-
-It must consolidate:
-
-- scalar/dense/sparse correctness;
-- workload cycle counts;
-- retired instruction counts;
-- multiply accounting;
-- sensor fixture results;
-- storage accounting;
-- generic synthesis counts;
-- incremental sparse overhead;
-- timing and power limitations.
-
-Avoid duplicating conflicting metrics across many documents.
-
-Where older documents contain stale values, correct them.
-
-### 6. Reproduction Guide
-
-Provide a concise reproducibility guide.
-
-At minimum include:
-
-```text
-make check
-make test-full-regression
-make test-workload-all
-make test-sensor-all
-make ppa-all
+```bash
+python3 scripts/sensor_workload.py \
+  --external-manifest /path/to/workload.json \
+  --workspace /path/to/workspace \
+  --emit
 ```
 
-Explain:
+Execution may be exposed through a wrapper such as:
 
-- prerequisites;
-- expected tools;
-- generated artifacts;
-- ignored output directories;
-- approximate purpose of each command;
-- what successful output should contain.
+```bash
+python3 scripts/run_external_sensor_workload.py \
+  --manifest /path/to/workload.json \
+  --workspace /path/to/workspace
+```
 
-Do not provide unsupported installation instructions.
+or stable Make targets:
 
-### 7. Quick-Start Path
+```bash
+make test-sensor-rtl-external-dense \
+  SENSOR_MANIFEST=/path/to/workload.json \
+  SENSOR_WORKSPACE=/path/to/workspace
+```
 
-Add a minimal path for a reviewer who wants to validate the project quickly.
+```bash
+make test-sensor-rtl-external-sparse \
+  SENSOR_MANIFEST=/path/to/workload.json \
+  SENSOR_WORKSPACE=/path/to/workspace
+```
 
-Preferred sequence:
+Choose the smallest design that reuses the existing implementation cleanly.
 
-1. repository checks;
-2. one focused vector test;
-3. workload comparison;
-4. sensor comparison;
-5. PPA report generation.
+## Isolated Workspace
 
-The quick-start should not require understanding the entire repository first.
+All generated files must be written beneath the explicitly supplied workspace.
 
-### 8. Verification Summary
+Requirements:
 
-Create or polish a final verification summary including:
+- do not overwrite checked-in fixture files;
+- do not modify tracked source files;
+- reject unsafe workspace paths if necessary;
+- dense and sparse workspaces may coexist;
+- remove or overwrite stale generated outputs deterministically;
+- document generated file names.
 
-- directed tests;
-- deterministic randomized tests;
-- dense/sparse equivalence;
-- invalid metadata;
-- command backpressure;
-- completion backpressure;
-- reset cancellation;
-- wrong-path suppression;
-- scalar dependencies;
-- vector memory;
-- end-to-end bare-metal programs;
-- sensor multi-sample execution;
-- configuration-specific synthesis checks;
-- full regressions.
+## Existing RTL and Testbench
 
-Report actual deterministic seeds and case counts where available.
+Reuse the existing:
 
-Do not claim formal verification unless formal tools were actually used.
+- processor RTL;
+- vector execution paths;
+- dense instruction semantics;
+- sparse instruction semantics;
+- integration testbench;
+- simulator commands.
 
-### 9. Results Provenance
+Do not modify RTL unless a genuine pre-existing bug prevents the documented fixed fixture from functioning. Such a discovery is a blocker requiring human review.
 
-For every headline result, identify:
+A testbench-only parameterization is permitted only if required to point it at workspace-generated files and it does not alter architectural behavior. Prefer plusargs, parameters, environment variables, or generated include/data paths over source rewriting.
 
-- source test or script;
-- measurement definition;
-- whether measured or derived;
-- units;
-- configuration;
-- tool version where relevant.
+## Machine-Readable Result
 
-At minimum cover:
+Emit a result file such as:
 
-- 7,399/484/484 cycles;
-- 3,948/109/109 retired instructions;
-- 32 executed and 32 skipped sparse multiplies;
-- 64-byte dense versus 38-byte sparse storage;
-- 14,029/62,928/65,691 generic cell counts;
-- 4.39% sparse-over-dense overhead.
+```text
+result.json
+```
 
-### 10. Repository Cleanup
+with version:
 
-Audit the repository for:
+```text
+sparrowv_external_sensor_result_v1
+```
 
-- obsolete temporary files;
-- stale generated files;
-- duplicate documentation;
-- dead scripts;
-- abandoned test artifacts;
-- `.DS_Store`;
-- untracked build outputs;
-- broken relative links;
-- stale `.codex/milestone_result.md` references;
-- old result values;
-- misleading comments;
-- inconsistent terminology.
+Include:
 
-Do not delete files merely because they look old.
+- execution mode;
+- sample ID;
+- simulator exit status;
+- termination reason;
+- four signed INT32 accumulators;
+- predicted class if already computed by the runtime;
+- expected accumulators if supplied;
+- exact-match status if self-checking is enabled;
+- cycles;
+- retired instructions;
+- vector loads;
+- vector stores;
+- dense dot-product count;
+- sparse dot-product count;
+- measured executed/skipped multiplication counters if available;
+- clearly labelled derived counters otherwise;
+- trap/assertion status.
 
-Delete or archive only files that are demonstrably obsolete and unreferenced.
+Do not invent counters that the current design does not expose.
 
-### 11. Source Manifest
+## Stdout Contract
 
-Update the source manifest so it accurately distinguishes:
+Also print concise parseable marker lines for debugging, for example:
 
-- production/reference RTL;
-- experimental pipeline RTL;
-- vector RTL;
-- synthesis wrappers;
-- testbenches;
-- workload scripts;
-- sensor-model assets;
-- documentation;
-- generated/ignored outputs.
+```text
+SPARROWV_RESULT mode=dense_int8 sample_id=...
+SPARROWV_ACCUMULATORS a0=... a1=... a2=... a3=...
+SPARROWV_COUNTER cycles=...
+SPARROWV_STATUS PASS
+```
 
-### 12. Stable Target Audit
+The JSON result is canonical; stdout markers are secondary.
 
-Audit public Make targets.
+## Existing Workflow Preservation
 
-Ensure stable targets have clear names and no accidental duplication.
+The following must remain unchanged and passing:
 
-At minimum preserve:
+```bash
+make test-sensor-rtl-dense
+make test-sensor-rtl-sparse
+```
 
-- scalar regression;
-- vector regression;
-- full regression;
-- workload tests;
-- sensor tests;
-- PPA generation;
-- lint;
-- repository checks;
-- documentation checks.
+The checked-in fixture remains the default when no external manifest is supplied.
 
-Add a concise help target only if it can be done cleanly without broad Makefile restructuring.
+## Tests
 
-### 13. Final Limitations Section
+Add focused tests for:
+
+- dense external manifest validation;
+- sparse external manifest validation;
+- invalid dimensions;
+- invalid integer ranges;
+- invalid sparse metadata;
+- deterministic generated files;
+- isolated workspace behavior;
+- no tracked fixture overwrite;
+- dense real RTL execution;
+- sparse real RTL execution;
+- exact accumulator reporting;
+- result JSON schema;
+- missing counter handling;
+- existing fixture regression.
+
+Tests must not require internet, GPU, synthesis, FPGA, OpenLane, or SparrowML.
+
+## Documentation
+
+Update:
+
+- README sensor workload section;
+- relevant workload/testbench documentation;
+- Make help;
+- source manifest if required.
 
 Document:
 
-- experimental status of `rv32_core_pipe`;
-- no full RVV;
-- fixed 32-bit vector width;
-- one outstanding vector command;
-- fixed-latency dense and sparse execution;
-- no sparse latency reduction yet;
-- no compressed sparse-load instruction;
-- no SRAM macro mapping;
-- generic synthesis only;
-- no physical timing closure;
-- no measured power;
-- fixture accuracy rather than general model accuracy;
-- no full compiler backend.
+- external manifest schema;
+- supported dimensions;
+- dense and sparse commands;
+- workspace behavior;
+- result schema;
+- measured versus derived counters;
+- repository-boundary guarantee;
+- exact reproduction examples.
 
-### 14. Future Research Directions
+## Validation
 
-Include a bounded future-work section covering:
+Run:
 
-- compressed sparse data movement;
-- packed sparse loads;
-- fused sparse operations;
-- latency crossover points;
-- layer-adaptive structured sparsity;
-- hardware-aware pruning;
-- SRAM-backed physical implementation;
-- real dataset expansion;
-- SparrowML integration.
-
-Do not implement these in this milestone.
-
-### 15. Final CV-Ready Project Summary
-
-Add one concise project-summary section suitable for later reuse.
-
-It should state, truthfully:
-
-- what was designed;
-- what was verified;
-- what workload was run;
-- what was measured;
-- the sparse arithmetic/storage benefits;
-- the sparse hardware overhead;
-- the main limitation.
-
-Do not create a resume file unless one already exists in the repository.
-
-## Out of Scope
-
-Do not add:
-
-- new ISA instructions;
-- new RTL datapaths;
-- new processor stages;
-- sparse-load instructions;
-- fused instructions;
-- caches;
-- DMA;
-- AXI;
-- wider vectors;
-- new ML models;
-- model training;
-- ONNX support;
-- compiler IR;
-- GCC or LLVM support;
-- OpenLane/OpenROAD implementation;
-- timing-driven RTL optimization;
-- power estimation;
-- new benchmarks;
-- research experiments;
-- changes to `rtl/core/rv32_core.sv`.
-
-Do not change validated architectural behavior merely to simplify documentation.
-
-## Consistency Requirements
-
-All final documents must agree on:
-
-- instruction names;
-- vector register count;
-- lane ordering;
-- scratchpad size;
-- metadata encoding;
-- workload dimensions;
-- sample count;
-- class names;
-- cycle counts;
-- retirement counts;
-- multiplication counts;
-- storage values;
-- synthesis counts;
-- sparse overhead;
-- tool versions;
-- limitations.
-
-Search for stale or conflicting values before completion.
-
-## Link Validation
-
-Check every relative Markdown link in:
-
-- README;
-- architecture documents;
-- implementation status;
-- verification plan;
-- final results documents.
-
-Add a bounded link-checking script only if one does not exist and it can be implemented without external dependencies.
-
-Broken links must fail the documentation check.
-
-## Reproducibility Validation
-
-From a clean or effectively clean working tree, verify:
-
-```text
+```bash
+python3 -m compileall scripts python
+pytest
+make test-sensor-rtl-dense
+make test-sensor-rtl-sparse
+make test-sensor-rtl-external-dense
+make test-sensor-rtl-external-sparse
 make check
-make test-vector-regression
-make test-workload-all
-make test-sensor-all
-make ppa-all
-make test-full-regression
-make lint
-make docs-check
 git diff --check
 ```
 
-If generated PPA results are ignored, confirm regeneration does not modify tracked source files unexpectedly.
-
-## Final Release Readiness
-
-Create a release-readiness checklist covering:
-
-- clean working tree before release;
-- all stable targets passing;
-- README complete;
-- architecture diagrams render;
-- final metrics consistent;
-- no secrets or personal data;
-- no generated junk;
-- no broken links;
-- limitations stated;
-- reproducibility commands documented;
-- repository ready for a version tag.
-
-Do not create a Git tag or GitHub release.
+Use small deterministic manifests derived from the existing checked-in fixture for repository-local external-interface tests.
 
 ## Acceptance Criteria
 
 The milestone is complete only when:
 
-1. README provides a coherent project overview.
-2. README includes motivation, architecture, verification, results, reproduction, and limitations.
-3. One final architecture overview exists.
-4. One architecture diagram exists.
-5. One sparse dataflow diagram exists.
-6. Custom instructions are summarized accurately.
-7. One canonical final-results document exists.
-8. Workload metrics are consistent across all tracked files.
-9. Sensor fixture metrics are consistent across all tracked files.
-10. Storage metrics are consistent across all tracked files.
-11. Synthesis metrics are consistent across all tracked files.
-12. Sparse incremental overhead is reported as 4.39%.
-13. Generic-memory mapping limitations are explicit.
-14. Fixed-latency dense/sparse behavior is explicit.
-15. Results provenance is documented.
-16. Measured and derived metrics are distinguished.
-17. Reproduction commands are documented.
-18. Quick-start commands are documented.
-19. Verification coverage is summarized.
-20. Deterministic seeds and case counts are included where available.
-21. Repository structure is documented.
-22. Source manifest is accurate.
-23. Public Make targets are consistent.
-24. No stale milestone-result path remains.
-25. No `.DS_Store` files remain.
-26. No obsolete generated outputs are tracked unintentionally.
-27. No broken documentation links remain.
-28. No conflicting headline metrics remain.
-29. Limitations are complete and honest.
-30. Future research directions are documented but not implemented.
-31. A release-readiness checklist exists.
-32. The scalar reference core remains unchanged.
-33. All workload and sensor tests pass.
-34. All scalar and vector regressions pass.
-35. PPA report regeneration passes.
-36. Lint passes with only documented non-fatal warnings.
-37. Repository checks pass.
-38. Documentation checks pass.
-39. `git diff --check` passes.
-40. No new architectural functionality is added.
-41. No commit or push occurs.
-42. `docs/codex_milestone_result.md` is finalized.
+1. A versioned external workload manifest exists.
+2. Dense external models are supported.
+3. Sparse external models are supported.
+4. Inputs are validated.
+5. Weights are validated.
+6. Biases are validated.
+7. Sparse metadata is validated.
+8. External files are generated in an isolated workspace.
+9. Checked-in fixture files are not overwritten.
+10. Existing dense fixture regression passes.
+11. Existing sparse fixture regression passes.
+12. External dense RTL simulation passes.
+13. External sparse RTL simulation passes.
+14. Four INT32 accumulators are emitted.
+15. A versioned JSON result is emitted.
+16. Simulator failures are reported clearly.
+17. Traps and assertion failures are reported.
+18. Available counters are emitted.
+19. Missing counters are labelled unavailable.
+20. Derived counters are labelled derived.
+21. No RTL change is made.
+22. No ISA change is made.
+23. No architectural behavior change is made.
+24. No SparrowML dependency is added.
+25. Documentation is complete.
+26. `make check` passes.
+27. `git diff --check` passes.
+28. No commit or push occurs.
+29. The milestone result file is finalized.
 
 ## Stop Conditions
 
 Stop for human review only if:
 
-- tracked documents contain irreconcilable conflicting metrics;
-- a headline result cannot be reproduced;
-- a public command no longer works;
-- final regression reveals a likely architectural correctness bug;
-- repository cleanup would require deleting uncertain source material;
-- diagrams cannot accurately represent the implemented design;
-- source ownership or licensing is unclear;
-- secret or personal data is discovered.
+- the existing testbench cannot consume workspace-generated files without an RTL or ISA change;
+- current dense or sparse fixture regressions fail before changes;
+- external execution reveals a genuine RTL correctness defect;
+- simulator tools are unavailable;
+- the smallest interface would require modifying architectural behavior.
 
-Ordinary documentation edits, broken links, stale metrics, and repository cleanup are not stop conditions.
+Ordinary CLI, manifest, workspace, testbench-path, parsing, counter, and documentation issues are not stop conditions.
 
-## Required Documentation
+## Token Efficiency
 
-Create or update, as appropriate:
+- inspect only the current sensor workload generator, Make targets, integration testbench, directly instantiated modules, and relevant docs;
+- do not audit unrelated CPU, vector, synthesis, FPGA, or ASIC flows;
+- reuse the current fixture generation path;
+- avoid generalizing beyond 16 inputs and 4 outputs;
+- run focused tests first and aggregate checks once;
+- do not commit or push.
 
-- `README.md`;
-- one final architecture overview;
-- one canonical final-results document;
-- one reproduction guide;
-- one release-readiness checklist;
-- `docs/implementation_status.md`;
-- `docs/verification_plan.md`;
-- `docs/milestone_history.md`;
-- `docs/source_manifest.md`;
-- `docs/codex_context.md`;
-- `docs/codex_milestone_result.md`.
+## Result File
 
-Avoid unnecessary document proliferation.
-
-Prefer updating existing documents over adding duplicates.
-
-## Required Result File
-
-Update:
+Finalize the repository’s tracked milestone result with:
 
 ```text
-docs/codex_milestone_result.md
+STATUS: COMPLETE
 ```
 
-throughout the run.
+only if the external dense and sparse RTL executions succeed.
 
-Finalize it with:
+Include:
 
-- `STATUS: COMPLETE`, `STATUS: FAILED`, or `STATUS: BLOCKED`;
-- final project summary;
-- exact headline metrics;
-- documentation files created or updated;
-- files removed and why;
-- broken links fixed;
-- stale metrics corrected;
-- exact commands and outcomes;
+- chosen CLI and manifest schema;
+- generated workspace files;
+- dense command and result;
+- sparse command and result;
+- emitted accumulators;
+- counter availability;
+- existing fixture regression results;
+- changed files;
+- confirmation of no RTL/ISA changes;
 - remaining limitations;
-- release-readiness verdict;
-- confirmation that no architectural feature was added;
-- confirmation that `rtl/core/rv32_core.sv` is unchanged;
 - confirmation that no commit or push occurred.
