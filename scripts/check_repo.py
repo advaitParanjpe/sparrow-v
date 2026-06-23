@@ -82,22 +82,27 @@ def validate_required_sections(root: Path) -> list[str]:
     return errors
 
 
-def validate_manifest_links(root: Path) -> list[str]:
-    manifest = root / "docs/source_manifest.md"
-    if not manifest.is_file():
-        return ["cannot validate source manifest: docs/source_manifest.md is missing"]
+def validate_markdown_links(root: Path) -> list[str]:
     errors: list[str] = []
-    text = manifest.read_text(encoding="utf-8")
-    links = MARKDOWN_LINK.findall(text)
-    if not links:
-        return ["source manifest contains no Markdown links"]
-    for target in links:
-        target = target.split("#", 1)[0]
-        if not target or "://" in target or target.startswith("mailto:"):
-            continue
-        if not (manifest.parent / target).resolve().exists():
-            errors.append(f"source manifest references missing path: {target}")
+    for document in markdown_files(root):
+        text = document.read_text(encoding="utf-8")
+        for target in MARKDOWN_LINK.findall(text):
+            target = target.split("#", 1)[0].split("?", 1)[0]
+            if not target or "://" in target or target.startswith("mailto:"):
+                continue
+            if not (document.parent / target).resolve().exists():
+                errors.append(
+                    f"broken Markdown link: {document.relative_to(root)} -> {target}"
+                )
     return errors
+
+
+def validate_manifest_links(root: Path) -> list[str]:
+    """Compatibility entry point retained for repository-check unit tests.
+
+    Manifest links are now covered by the repository-wide Markdown validator.
+    """
+    return validate_markdown_links(root)
 
 
 def validate_generated_outputs(root: Path) -> list[str]:
@@ -119,7 +124,7 @@ def run_checks(root: Path, docs_only: bool) -> list[str]:
     errors = validate_required_files(root)
     errors.extend(validate_placeholders(root))
     errors.extend(validate_required_sections(root))
-    errors.extend(validate_manifest_links(root))
+    errors.extend(validate_markdown_links(root))
     if not docs_only:
         errors = validate_required_directories(root) + errors
         errors.extend(validate_generated_outputs(root))

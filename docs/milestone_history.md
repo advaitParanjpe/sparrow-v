@@ -1,5 +1,19 @@
 # Milestone history
 
+## Final Integration, Documentation, and Portfolio Release — 2026-06-23
+
+- Summary: consolidated implemented RTL, deterministic workloads, sensor
+  fixture, and generic synthesis evidence into a coherent landing page,
+  architecture overview, canonical results, reproduction guide, source manifest,
+  verification summary, and release-readiness checklist. No architectural
+  feature was added.
+- Evidence: scalar/dense/sparse FC output is `[382,-446,-246,1054]`; cycles
+  are 7,399/484/484; retirements are 3,948/109/109; sparse executes/skips
+  32/32 multiplies; storage is 64 dense versus 38 sparse bytes; generic cells
+  are 14,029/62,928/65,691 and sparse-over-dense overhead is 4.39%.
+- Claim boundary: `rv32_core_pipe` remains experimental; generic Yosys mapping
+  is not SRAM, physical timing, or power evidence.
+
 Append completed, human-reviewed milestones below. Pending-review implementation evidence must be explicitly marked and must not imply a commit. Do not reconstruct or invent prior entries.
 
 ### Hardware-Aware Model Exporter and Multi-Sample Sensor Inference — implementation complete, pending human review — 2026-06-23

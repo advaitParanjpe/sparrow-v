@@ -1,5 +1,24 @@
 # Verification plan
 
+## Final verification summary
+
+The stable final commands are `make test-scalar-regression`, `make
+test-vector-regression`, `make test-workload-all`, `make test-sensor-all`,
+`make ppa-all`, `make test-full-regression`, `make lint`, `make check`, and
+`make docs-check`. The full regression combines the scalar and vector
+aggregates with Python, lint, repository, and documentation checks; it excludes
+the known expected-fail throughput experiment.
+
+Coverage is directed plus deterministic randomized, not formal verification.
+It includes scalar dependencies, memory behavior, command/completion
+backpressure, reset cancellation, wrong-path suppression, precise metadata and
+memory exceptions, vector state commit timing, FC programs, sensor samples,
+and configuration-specific synthesis checks. Deterministic random coverage is:
+VADD8 32 cases/seed `0x13579bdf`; VDOT8 32/`0x2468ace1`; vector memory
+24/`0x1234abcd`; VSDOT8 96/`0x5a17c0de`; scalar differential normal mode
+32 seeds and delayed modes 1–3 at seed 17. The sensor suite runs 16 samples in
+each dense and sparse mode.
+
 ## Checks available now
 
 - Configuration/PPA checks: `make test-config-scalar`,

@@ -8,10 +8,10 @@ SIM_BUILD := sim/build
 
 help:
 	@printf '%s\n' \
-	  'Focused: test-scalar-directed, test-scalar-pipe-*, test-scalar-pipe-vec-stub-all' \
-	  'VADD aliases: test-vector-regfile and test-vector-vadd-alias use test-vector-vadd-directed coverage' \
+	  'Focused vector: test-vector-vsdot-all, test-vector-vadd-all, test-vector-vdot-all, test-vector-vmem-all' \
+	  'Workloads: test-workload-all, test-sensor-all' \
 	  'Aggregates: test-scalar-regression, test-vector-regression, test-full-regression' \
-	  'Checks: lint, check, docs-check' \
+	  'PPA: ppa-all; checks: lint, check, docs-check' \
 	  'Non-blocking expected-fail: check-scalar-throughput-experiment'
 
 .PHONY: test-scalar-pipe-dev

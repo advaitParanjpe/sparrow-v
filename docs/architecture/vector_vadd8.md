@@ -34,6 +34,8 @@ interface, software ABI, or ISA feature. There is no vector memory, masks,
 wider elements, saturation, persistent accumulator, or other vector arithmetic
 in this milestone.
 
-The same engine also implements the separate experimental sparse scalar-result
-operation documented in [VSDOT8](vector_vsdot8.md); it does not add a vector
-register or scratchpad owner.
+The same engine also owns the separate 256-byte vector scratchpad and implements
+the experimental `VLOAD32`/`VSTORE32` transfers documented in
+[vector memory](vector_memory.md), plus the sparse scalar-result operation
+documented in [VSDOT8](vector_vsdot8.md). Neither feature adds another vector
+state owner.

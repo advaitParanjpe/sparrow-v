@@ -1,51 +1,31 @@
-# Planning Source Manifest
+# Source Manifest
 
-The original planning documents remain unmodified in `sparrow-v-project-plan/` and are the source of truth for Phase 0. This manifest records their locations; it is checked by `make docs-check` so references cannot silently go stale.
+This manifest distinguishes tracked source from reproducible generated output.
+`make docs-check` validates every relative Markdown link in the repository.
 
-## Source planning documents
+## RTL ownership
 
-- [Project-plan overview](../sparrow-v-project-plan/README.md)
-- [Project charter](../sparrow-v-project-plan/docs/01_project_charter.md)
-- [System architecture](../sparrow-v-project-plan/docs/02_system_architecture.md)
-- [Scalar core](../sparrow-v-project-plan/docs/03_scalar_core.md)
-- [Vector ISA](../sparrow-v-project-plan/docs/04_vector_isa.md)
-- [Vector microarchitecture](../sparrow-v-project-plan/docs/05_vector_microarchitecture.md)
-- [Sparse execution](../sparrow-v-project-plan/docs/06_sparse_execution.md)
-- [Memory system](../sparrow-v-project-plan/docs/07_memory_system.md)
-- [Extension interface](../sparrow-v-project-plan/docs/08_extension_interface.md)
-- [Software toolchain](../sparrow-v-project-plan/docs/09_software_toolchain.md)
-- [Verification plan](../sparrow-v-project-plan/docs/10_verification_plan.md)
-- [Benchmarks and evaluation](../sparrow-v-project-plan/docs/11_benchmarks_and_evaluation.md)
-- [Intended repository structure](../sparrow-v-project-plan/docs/12_repo_structure.md)
-- [Build roadmap](../sparrow-v-project-plan/docs/13_build_roadmap.md)
-- [Coding and design rules](../sparrow-v-project-plan/docs/14_coding_and_design_rules.md)
-- [Acceptance criteria](../sparrow-v-project-plan/docs/15_acceptance_criteria.md)
-- [Risks and tradeoffs](../sparrow-v-project-plan/docs/16_risks_and_tradeoffs.md)
-- [Open questions](../sparrow-v-project-plan/docs/17_open_questions.md)
-- [Original Codex Phase 0 prompt](../sparrow-v-project-plan/prompts/codex_initial_build_prompt.md)
+- Production/reference scalar RTL: [`rtl/core/rv32_core.sv`](../rtl/core/rv32_core.sv), with shared decoder, ALU, immediate, register-file, and package sources in [`rtl/core/`](../rtl/core/) and [`rtl/common/`](../rtl/common/).
+- Experimental scalar/vector pipeline: [`rtl/core/rv32_core_pipe.sv`](../rtl/core/rv32_core_pipe.sv). It is not the production core.
+- Vector RTL: [`rtl/vector/rv32_vec_vadd_engine.sv`](../rtl/vector/rv32_vec_vadd_engine.sv) owns vector registers, scratchpad, VADD8, VDOT8, VSDOT8, and vector transfers; [`rv32_vec_stub_engine.sv`](../rtl/vector/rv32_vec_stub_engine.sv) is the protocol endpoint used by focused adapter tests.
+- Synthesis wrappers: [`rtl/top/sparrowv_ppa_tops.sv`](../rtl/top/sparrowv_ppa_tops.sv), with configuration in [`config/ppa_configurations.json`](../config/ppa_configurations.json) and source manifests in [`synth/yosys/manifests/`](../synth/yosys/manifests/).
 
-## Phase 0 derived documents
+## Verification and software
 
-- [Repository architecture](architecture.md)
-- [Current milestone template](current_milestone.md)
-- [Codex context map](codex_context.md)
-- [Implementation status](implementation_status.md)
-- [Verification plan](verification_plan.md)
-- [Milestone history](milestone_history.md)
-- [Codex milestone prompt](codex_milestone_prompt.md)
+- Integration testbenches: [`tb/integration/`](../tb/integration/), including scalar, differential, vector, workload, and sensor benches.
+- Python unit/repository tests: [`tb/tests/`](../tb/tests/); independent RV32I helper: [`python/verification/rv32i_reference.py`](../python/verification/rv32i_reference.py).
+- Workload encoder and golden model: [`scripts/workload_fc.py`](../scripts/workload_fc.py).
+- Sensor export: [`scripts/sensor_workload.py`](../scripts/sensor_workload.py), with checked-in deterministic fixture assets in [`python/sparrowv_model/`](../python/sparrowv_model/).
+- PPA flow and repository checks: [`scripts/ppa_flow.py`](../scripts/ppa_flow.py) and [`scripts/check_repo.py`](../scripts/check_repo.py).
 
-- [Open questions and inconsistencies](architecture/open_questions.md)
-- [Phase dependency map](architecture/phase_dependencies.md)
-- [Phase 0 repository setup report](build_reports/phase_0_repository_setup.md)
-- [Decision records](decisions/)
-- [Phase 1 scalar contract](architecture/scalar_core.md)
-- [Phase 1 memory interface](architecture/memory_interface.md)
-- [Phase 1 trap behavior](architecture/trap_behavior.md)
-- [Phase 1 verification plan](verification/scalar_phase_1.md)
-- [Phase 1 scalar baseline report](build_reports/phase_1_scalar_baseline.md)
-- [Generic synthesis PPA evaluation](architecture/synthesis_ppa_evaluation.md)
-- [Phase 1.5 scalar audit](build_reports/phase_1_5_audit.md)
-- [Phase 1.6 fetch frontend](architecture/fetch_frontend.md)
-- [Phase 1.7 pipeline proof](build_reports/phase_1_7_pipeline_proof.md)
-- [Phase 1.8b integer development pipeline](build_reports/phase_1_8b_integer_pipeline.md)
-- [Phase 1.8c development control flow](build_reports/phase_1_8c_control_flow.md)
+## Documentation
+
+- Landing page: [`README.md`](../README.md); architecture: [`architecture.md`](architecture.md); results: [`final_results.md`](final_results.md); reproduction: [`reproduction.md`](reproduction.md); release gates: [`release_readiness.md`](release_readiness.md).
+- Detailed architecture: [`docs/architecture/`](architecture/); verification: [`verification_plan.md`](verification_plan.md); implementation status: [`implementation_status.md`](implementation_status.md); milestone record: [`milestone_history.md`](milestone_history.md).
+- Original planning material is preserved in [`sparrow-v-project-plan/`](../sparrow-v-project-plan/); it is historical input, not a claim that every planned feature was implemented.
+
+## Generated and ignored output
+
+- [`sim/build/`](../sim/build/) contains generated images and simulation executables.
+- [`results/ppa/`](../results/ppa/) contains regenerated Yosys logs, netlists, metadata, JSON, and Markdown comparison reports.
+- These outputs are intentionally untracked. Regenerate them with the commands in [`reproduction.md`](reproduction.md).

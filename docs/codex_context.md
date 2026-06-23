@@ -69,8 +69,8 @@ experiment and is not part of correctness regression.
 Details: [architecture overview](architecture.md),
 [scalar interface freeze](architecture/scalar_interface_freeze.md),
 [scalar/vector interface](architecture/scalar_vector_interface.md),
-[production readiness](architecture/scalar_production_readiness.md), and
-`docs/decisions/`.
+[production readiness](architecture/scalar_production_readiness.md),
+[canonical final results](final_results.md), and `docs/decisions/`.
 
 ## Lean workflow
 

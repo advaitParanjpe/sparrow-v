@@ -1,43 +1,70 @@
 STATUS: COMPLETE
-MILESTONE: Scalar vs Dense-Vector vs Sparse-Vector Synthesis and PPA Evaluation
+MILESTONE: Final Integration, Documentation, and Portfolio Release
 COMPLETED_AT: 2026-06-23
 
 SUMMARY
-Implemented three deterministic configurations, generic-Yosys synthesis, JSON/Markdown report generation, configuration-specific functional targets, and the required documentation. Scalar uses protected `rv32_core`; dense and sparse use the experimental pipe with the shared vector engine parameterized as `ENABLE_SPARSE=0/1`. No production-core change or promotion occurred.
+Completed the documentation-and-release integration without adding RTL or ISA
+functionality. The repository now has a portfolio landing page, Mermaid
+architecture and sparse-dataflow diagrams, canonical results/provenance,
+reproduction guide, release checklist, accurate source manifest, improved
+target help, and repository-wide relative Markdown-link validation.
 
-CONFIGURATION_AND_PPA_RESULTS
-- Tool/technology: Yosys 0.66; generic `cmos2` mapping. Clock reporting targets: 10 ns (100 MHz) and 20 ns.
-- Scalar: 14,029 total cells; 1,311 sequential; 12,718 combinational; depth proxy 84; memory bits 0.
-- Dense: 62,928 total cells; 4,842 sequential; 58,086 combinational; depth proxy 81; vector memory bits 3,072.
-- Sparse: 65,691 total cells; 4,842 sequential; 60,849 combinational; depth proxy 83; vector memory bits 3,072.
-- Overheads: dense/scalar +48,899 (+348.56%); sparse/dense +2,763 (+4.39%); sparse/scalar +51,662 (+368.25%).
-- Memory: vector register file and scratchpad are generic flip-flop/mux mapped, not SRAM macros. No latches or black boxes were reported.
-- Timing/power: no Liberty/STA or activity flow is installed. Worst slack, Fmax, mapped area, and dynamic/leakage power are N/A; logic depth is only a structural proxy. No physical implementation ran.
-- Workloads: FC scalar/dense/sparse cycles are 7,399/484/484; derived 100-MHz latency is 73,990/4,840/4,840 ns. Sensor dense/sparse are 484 cycles/sample. Dense and sparse are equal because both use the same fixed-latency command/completion path and schedule. Sparse executes 32 and skips 32 FC multiplies, with 38-byte versus 64-byte weight storage.
+HEADLINE_RESULTS
+- All FC paths produce `[382, -446, -246, 1054]`; scalar/dense/sparse measured
+  7,399/484/484 cycles and 3,948/109/109 retired instructions.
+- Sparse FC measured 32 executed and 32 skipped multiplies; dense storage is
+  64 bytes and sparse weight-plus-metadata storage is 38 bytes (40.625%
+  reduction).
+- Sensor fixture: 16/16 correct dense and sparse predictions; zero disagreements.
+- Generic Yosys 0.66 `cmos2` totals: scalar 14,029, dense 62,928, sparse
+  65,691 cells. Sparse adds 2,763 cells (4.39%) over dense.
 
 CHANGED_FILES
-- `Makefile`, `config/ppa_configurations.json`, `synth/yosys/manifests/*.f`, `scripts/ppa_flow.py`
-- `rtl/top/sparrowv_ppa_tops.sv`, `rtl/vector/rv32_vec_vadd_engine.sv`
-- `docs/architecture/synthesis_ppa_evaluation.md`, README/status/verification/history/source-manifest documentation, and this result file.
+- Updated: `README.md`, `Makefile`, `docs/architecture.md`,
+  `docs/architecture/vector_vadd8.md`, `docs/codex_context.md`,
+  `docs/implementation_status.md`, `docs/milestone_history.md`,
+  `docs/source_manifest.md`, `docs/verification_plan.md`, and
+  `scripts/check_repo.py`.
+- Added: `docs/final_results.md`, `docs/reproduction.md`, and
+  `docs/release_readiness.md`.
+- Removed: no files. No stale `.codex/milestone_result.md` reference, tracked
+  generated artifact, or `.DS_Store` file was found.
 
 COMMANDS_AND_OUTCOMES
-- `python3 scripts/ppa_flow.py --config scalar`: PASS.
-- `make ppa-all`: PASS; generated ignored reproducible `results/ppa/` raw logs, netlists, metadata, JSON summary, and Markdown comparison.
-- `make test-config-scalar && make test-config-dense && make test-config-sparse`: PASS. Dense checks used `SPARROWV_DENSE_ONLY`; sparse ran the complete vector regression.
-- `make test-workload-all`: PASS; scalar/dense/sparse output `[382,-446,-246,1054]` and stated cycle counts.
-- `make test-sensor-all`: PASS; all dense and sparse fixture invocations passed.
+- `make test-vector-vsdot-all`: PASS.
+- `make docs-check`: initial FAIL for pre-existing README heading requirements;
+  headings restored, then PASS with repository-wide relative-link validation.
+- `make test-workload-all`: PASS; reported all headline FC measurements.
+- `make test-sensor-all`: PASS; Python export tests and 16 dense plus 16 sparse
+  RTL runs passed.
+- `make ppa-all`: PASS; regenerated ignored `results/ppa/` artifacts.
 - `make test-vector-regression`: PASS.
-- `make test-full-regression`: PASS (existing informational Icarus/Verilator warnings only).
-- `make lint`: PASS with existing non-fatal warnings.
+- `make test-full-regression`: initial FAIL because the expanded link checker
+  removed a unit-test-imported helper; compatibility wrapper added. Rerun PASS
+  across scalar/vector regression, Python tests, lint, repository, and docs.
 - `make check`: PASS.
-- `make docs-check`: PASS.
-- `git diff --check`: PASS after final result-file update.
+- `make lint`: PASS with documented non-fatal Verilator filename, empty-pin,
+  multi-top, and unused-signal warnings.
+- `make docs-check` (final): PASS.
+- `make help`: PASS; stable target list printed.
+- `git diff --check`: PASS.
 
-REMAINING_LIMITATIONS
-Generic gate counts are not standard-cell area or SRAM macro estimates. No physical timing closure, power estimate, OpenLane/OpenROAD run, or tapeout claim is made. `rv32_core_pipe` remains experimental.
+KNOWN_WARNINGS_AND_LIMITATIONS
+Icarus emits existing non-fatal `always_*` sensitivity/synthesis-context and
+bounded `$readmemh` image-size warnings. Verilator emits the documented
+non-fatal synthesis-wrapper warnings. `rv32_core_pipe` remains experimental;
+Sparrow-V is not full RVV and has fixed 32-bit vectors, one outstanding vector
+command, fixed dense/sparse latency, no compressed sparse load, no full compiler
+backend, no SRAM macros, no physical timing closure, and no measured power.
+Sensor accuracy is fixture-only. Generic cell counts are not ASIC area, timing,
+or power claims.
 
-REFERENCE_CORE_STATUS
-`rtl/core/rv32_core.sv` is unchanged.
+RELEASE_READINESS
+Documentation, diagrams, metrics, reproducibility commands, source ownership,
+link validation, and final regression are complete. A human must still review
+the working-tree diff and make any release commit/tag manually.
 
-COMMIT_PUSH_STATUS
-No commit or push occurred. The worktree is ready for human review; generated PPA artifacts remain ignored and reproducible via `make ppa-all`.
+SAFETY_AND_SCOPE
+No architectural feature was added. `rtl/core/rv32_core.sv` is unchanged.
+Generated PPA and simulation artifacts remain ignored. No commit or push
+occurred.

@@ -1,32 +1,86 @@
-# Sparrow-V architecture
+# Sparrow-V Architecture Overview
 
-## Current repository architecture
+Sparrow-V has two scalar implementations. `rv32_core` is the protected,
+production/reference three-stage RV32I core. `rv32_core_pipe` is the
+experimental integration core used for scalar/vector workloads. It is
+single-issue, in-order, blocking, and non-speculative at the scalar/vector
+boundary; it is not promoted to replace the reference core.
 
-The repository contains a scalar RV32I baseline and a separate development pipeline. `rtl/core/rv32_core.sv` is the protected production/reference scalar implementation. It is a three-stage, single-issue in-order IF/DX/MW design with external instruction and data valid/ready interfaces, terminal simulation-oriented traps, and the directed integration test in `tb/integration/tb_scalar_core.sv`.
+## System overview
 
-`rtl/core/rv32_core_pipe.sv` is an isolated experimental implementation. Its store-retirement trace now matches the frozen reference representation in bounded focused and differential verification, but the human-approved production-readiness decision remains **C. Do not promote** because broader verification, formal-equivalence, and synthesis/PPA evidence are absent. `rv32_core.sv` remains the protected production/reference core.
+```mermaid
+flowchart LR
+  IMEM[Instruction memory] --> PIPE[Experimental scalar pipeline]
+  DMEM[Scalar data memory] <--> PIPE
+  PIPE -- command: one outstanding --> ENG[Vector engine]
+  ENG -- completion: result/status --> PIPE
+  ENG --> VRF[32 x 32-bit vector register file]
+  ENG <--> SPAD[256-byte vector scratchpad]
+  ENG --> VADD[VADD8\nfour INT8 adds]
+  ENG --> VDOT[VDOT8\nfour INT8 products]
+  ENG --> VSDOT[VSDOT8\n2:4 sparse decode]
+  PIPE --> WB[Scalar result writeback]
+  VDOT --> WB
+  VSDOT --> WB
+```
 
-The scalar decoder, immediate generator, ALU, and register file are in `rtl/core/`. The shared scalar package is `rtl/common/sparrowv_scalar_pkg.sv`. The documented production instruction and trap contract is in `docs/architecture/scalar_core.md`; fetch and memory protocols are in `fetch_frontend.md` and `memory_interface.md`.
+The diagram depicts `rv32_core_pipe`; the reference core does not issue vector
+commands. Scalar `dmem` and the vector scratchpad are separate state spaces.
 
-The detailed production-readiness comparison and evidence limits are in
-`docs/architecture/scalar_production_readiness.md`.
+## Command and state ownership
 
-The reference scalar core uses terminal sticky trap state (`mepc`, `mcause`, `mtvec`, `trap_valid`). Its data interface is one outstanding request/response, byte-addressed, little-endian, with byte strobes. The frozen v1 scalar integration contract is `architecture/scalar_interface_freeze.md`.
+The pipe captures scalar operands and vector indices, holds the command stable
+until the engine accepts it, then blocks scalar issue. The engine returns a
+stable completion until accepted. Successful vector-state updates and scalar
+result writeback occur only on that completion handshake. Exceptions are
+precise; reset cancels outstanding work and a wrong-path instruction cannot
+issue a command.
 
-## Verification and software boundary
+The engine exclusively owns 32 writable 32-bit vector registers (`v0`–`v31`)
+and a 256-byte byte-addressed, little-endian scratchpad. The scalar owns
+scalar registers, scalar retirement, traps, and scalar `dmem`. Test-only debug
+ports are not architectural interfaces.
 
-Directed scalar simulation uses Icarus through `make test-scalar-directed`; Verilator lint is `make lint`; repository/documentation checks are `make check`. Python contains a small RV32I reference helper and repository tests. A scalar smoke assembly source and ELF conversion/build scripts exist, but the local environment has no RISC-V cross compiler, so compiled software execution is not established.
+## Data paths
 
-There is an experimental scalar-to-vector adapter integrated directly into
-`rv32_core_pipe` and a deterministic stub endpoint in
-`rtl/vector/rv32_vec_stub_engine.sv`. They implement only the v1 blocking
-command/completion protocol: Custom-0 `funct3=000` returns a scalar test
-result, `001` retires without scalar writeback, and `010` raises a precise
-test exception. No real vector datapath, vector register file, vector memory,
-scratchpad, or sparse logic exists. There is no cache, randomized regression,
-scoreboard framework, formal flow, CI workflow, synthesis project, FPGA build,
-or OpenLane result in this repository snapshot.
+`VADD8` performs four modulo-256 lane additions. `VDOT8` interprets four
+little-endian lanes as signed INT8 values, forms four signed products, and
+returns their exact signed 32-bit sum. `VLOAD32`/`VSTORE32` transfer aligned
+32-bit words to/from the vector-only scratchpad; misalignment and range/wrap
+fail precisely.
 
-## Approved long-term direction
+`VSDOT8` consumes one activation word, two compressed weights in bytes 0 and
+1 of a weight word, and a legal three-bit 2-of-4 pattern. Weight 0 maps to the
+lower selected lane and weight 1 to the higher selected lane. It returns a
+signed 32-bit scalar sum after two executed products; invalid patterns `110`
+and `111` raise cause 18.
 
-The planning material proposes a compact RV32I scalar CPU coupled to a custom four-lane INT8/INT16 vector engine, vector loads/stores, arithmetic/dot/reduction/masks, 2:4 sparsity metadata, a banked scratchpad, bare-metal software, golden models, randomized verification, and FPGA/ASIC evaluation. The human-approved v1 command/completion and separate vector-memory boundary are defined in `architecture/scalar_vector_interface.md`; the protocol-only stub integration is intentionally experimental. Every real ISA, vector state, memory, sparse, and implementation-flow feature requires an explicit milestone and any required ADR before work begins.
+## Sparse dataflow
+
+```mermaid
+flowchart LR
+  A0[activation lane 0] --> SEL{3-bit pattern}
+  A1[activation lane 1] --> SEL
+  A2[activation lane 2] --> SEL
+  A3[activation lane 3] --> SEL
+  META[pattern 001 = lanes 0,2] --> SEL
+  W0[compressed weight 0] --> M0[multiply selected lower lane]
+  W1[compressed weight 1] --> M1[multiply selected higher lane]
+  SEL --> M0
+  SEL --> M1
+  M0 --> SUM[signed 32-bit sum]
+  M1 --> SUM
+  SKIP[Two non-selected lanes: two multiplies skipped] -. accounting .-> SUM
+```
+
+All legal mappings are `000={0,1}`, `001={0,2}`, `010={0,3}`, `011={1,2}`,
+`100={1,3}`, and `101={2,3}`. The example in the figure uses `001`; it does
+not imply a fixed pattern in software.
+
+## Further detail
+
+- [Scalar/vector command-completion contract](architecture/scalar_vector_interface.md)
+- [VADD8 and VDOT8 semantics](architecture/vector_vadd8.md)
+- [VSDOT8 metadata and accounting](architecture/vector_vsdot8.md)
+- [Vector scratchpad transfers](architecture/vector_memory.md)
+- [Workload layout and measurement definition](architecture/sparse_fc_workload.md)
