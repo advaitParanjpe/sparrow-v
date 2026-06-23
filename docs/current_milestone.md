@@ -1,55 +1,56 @@
-# Milestone: Hardware-Aware Model Exporter and Multi-Sample Sensor Inference
+# Milestone: Scalar vs Dense-Vector vs Sparse-Vector Synthesis and PPA Evaluation
 
 ## Objective
 
-Extend Sparrow-V from a single synthetic fully connected benchmark into a reproducible model-deployment flow for a small edge-sensor classification workload.
+Complete Sparrow-V’s hardware-cost evaluation by synthesizing and comparing three controlled processor configurations:
 
-The milestone must implement a bounded hardware-aware exporter that:
+1. scalar baseline;
+2. scalar core with dense-vector support;
+3. scalar core with dense and 2:4 sparse-vector support.
 
-1. accepts a deterministic quantized fully connected model and sensor-feature samples;
-2. validates signed INT8 and 2:4 sparsity requirements;
-3. emits dense and compressed sparse Sparrow-V data images;
-4. emits or reuses a Sparrow-V bare-metal program image;
-5. runs multiple samples through dense and sparse RTL execution;
-6. compares RTL outputs against an independent Python reference;
-7. reports correctness, predicted class, cycles, retired instructions, vector operations, multiplication accounting, and storage.
+The milestone must produce reproducible synthesis results and an honest comparison of:
 
-This is a Sparrow-V deployment milestone, not the full SparrowML project.
+- logic area or cell count;
+- register count;
+- memory contribution;
+- estimated maximum frequency or critical path;
+- timing slack at defined clock targets;
+- estimated dynamic and leakage power where supported;
+- workload latency in cycles;
+- area-normalized throughput;
+- sparse-feature hardware overhead.
+
+The evaluation must preserve the current verified architecture and workload behavior.
+
+This milestone is an implementation-cost study, not a tapeout claim.
 
 ## Baseline
 
 The repository currently contains:
 
 - `rtl/core/rv32_core.sv` as the unchanged scalar reference core;
-- `rtl/core/rv32_core_pipe.sv` as the experimental scalar/vector core;
-- a blocking, in-order scalar/vector command-completion interface;
+- `rtl/core/rv32_core_pipe.sv` as the experimental scalar/vector integration core;
+- shared scalar/vector command and completion handling;
 - one shared vector register file;
-- a 256-byte vector scratchpad;
+- one 256-byte vector scratchpad;
 - `VADD8`;
 - signed dense `VDOT8`;
 - signed compressed 2:4 `VSDOT8`;
 - `VLOAD32` and `VSTORE32`;
 - precise retirement, exception, reset, backpressure, and wrong-path behavior;
-- deterministic bare-metal scalar, dense-vector, and sparse-vector fully connected workloads;
-- a Python instruction and workload generator;
-- a Python golden model;
-- measured scalar, dense, and sparse execution metrics;
-- full scalar and vector regressions.
+- deterministic synthetic fully connected workload;
+- deterministic 16-sample sensor classification fixture;
+- reproducible model and sample export;
+- scalar, dense-vector, and sparse-vector workload measurements;
+- passing scalar, vector, workload, sensor, lint, and repository checks.
 
-The previous workload produced identical outputs:
+Current sensor-workload results per sample are:
 
-```text
-[382, -446, -246, 1054]
-```
-
-with:
-
-- scalar: 7399 cycles, 3948 retired instructions;
-- dense: 484 cycles, 109 retired instructions;
-- sparse: 484 cycles, 109 retired instructions;
-- sparse: 32 multiplications executed and 32 skipped;
-- dense weights: 64 bytes;
-- sparse compressed weights plus metadata: 38 bytes.
+- dense: 484 cycles, 109 retired instructions, 16 `VDOT8`;
+- sparse: 484 cycles, 109 retired instructions, 16 `VSDOT8`;
+- sparse: 32 executed and 32 skipped multiplications;
+- dense weight storage: 64 bytes;
+- sparse weight plus metadata storage: 38 bytes.
 
 ## Relevant Context
 
@@ -58,604 +59,548 @@ Read:
 - `AGENTS.md`
 - `docs/codex_context.md`
 - `docs/current_milestone.md`
-- `docs/architecture/sparse_fc_workload.md`
-- `docs/architecture/vector_vsdot8.md`
-- `docs/architecture/vector_memory.md`
 - `docs/architecture/scalar_vector_interface.md`
-- `scripts/workload_fc.py`
-- `tb/integration/tb_workload_fc.sv`
-- relevant Makefile targets
-- current implementation-status and verification-plan documents.
+- `docs/architecture/vector_vsdot8.md`
+- `docs/architecture/sparse_fc_workload.md`
+- `docs/architecture/sensor_workload_export.md`
+- `docs/implementation_status.md`
+- `docs/verification_plan.md`
+- current Makefile synthesis targets;
+- current source manifests;
+- relevant RTL top-level and vector-engine files;
+- any existing Yosys, OpenLane, or OpenROAD configuration.
 
-Read additional files only when required by a concrete implementation or verification issue.
+Read additional files only when required by a concrete synthesis or reporting issue.
 
-## Scope Summary
+## Evaluation Configurations
 
-Implement a reusable deployment path for a small vibration-fault or sensor-anomaly classifier represented as:
+Create three explicit, reproducible build configurations.
 
-```text
-signed INT8 input features
-→ one fully connected output layer
-→ signed INT32 logits
-→ argmax predicted class
-```
+### Configuration A — Scalar baseline
 
-Use:
+Purpose:
 
-- 16 signed INT8 input features;
-- 4 output classes;
-- 64 dense signed INT8 weights;
-- 4 signed INT32 biases;
-- equivalent dense and 2:4 sparse model forms;
-- at least 16 deterministic evaluation samples;
-- one expected class label per sample.
-
-The model may be a compact checked-in deployment fixture rather than a newly trained state-of-the-art model.
-
-It must be clearly labelled as a deterministic sensor-classification fixture unless its provenance from a real public dataset is already available and documented.
-
-Do not fabricate claims about model quality or dataset accuracy.
-
-## Input Model Format
-
-Define one stable machine-readable model format.
-
-Preferred format:
-
-```text
-JSON
-```
-
-The model description must include:
-
-- model name;
-- version;
-- input feature count;
-- output class count;
-- class names;
-- signed INT8 dense weight matrix;
-- signed INT32 bias vector;
-- optional feature scaling metadata;
-- optional provenance note;
-- explicit data-layout version.
-
-Example conceptual structure:
-
-```json
-{
-  "model_name": "sparrow_vibration_fixture",
-  "format_version": 1,
-  "input_features": 16,
-  "output_classes": 4,
-  "class_names": ["normal", "inner", "outer", "ball"],
-  "weights_int8": [
-    [0, 0, 0, 0],
-    [0, 0, 0, 0]
-  ],
-  "bias_int32": [0, 0, 0, 0]
-}
-```
-
-The actual weight layout must be documented unambiguously.
-
-The exporter must reject:
-
-- wrong matrix dimensions;
-- missing fields;
-- values outside signed INT8 or signed INT32 range;
-- inconsistent class counts;
-- malformed metadata;
-- unsupported format versions.
-
-## Sensor Sample Format
-
-Define one stable sample format.
-
-Preferred format:
-
-```text
-CSV or JSON
-```
-
-Each sample must include:
-
-- sample ID;
-- 16 signed INT8 input features;
-- expected class label;
-- optional source or fixture note.
-
-At least 16 deterministic samples must be checked in.
-
-The sample set must include:
-
-- positive values;
-- negative values;
-- zeros;
-- at least one `-128` where mathematically safe;
-- at least one `127`;
-- samples from all four classes where practical.
-
-The exporter must reject:
-
-- incorrect feature count;
-- values outside signed INT8;
-- unknown labels;
-- duplicate sample IDs where uniqueness is required.
-
-## Dense Model Export
-
-Export the dense model into the existing Sparrow-V workload representation.
+- establish the scalar processor hardware baseline.
 
 Requirements:
 
-- preserve the exact mathematical dense weight matrix;
-- use four groups of four weights per output class;
-- preserve little-endian INT8 lane ordering;
-- emit deterministic scratchpad or data-memory images;
-- emit deterministic expected-logit files;
-- emit any required manifest describing addresses and sizes.
+- use the repository’s scalar implementation intended for comparison;
+- exclude vector register file;
+- exclude vector scratchpad;
+- exclude vector execution logic;
+- exclude `VADD8`, `VDOT8`, `VSDOT8`, `VLOAD32`, and `VSTORE32`;
+- include only infrastructure genuinely required by the scalar implementation.
 
-Dense storage must report:
+Document which scalar core is used and why.
 
-```text
-64 weight bytes
-```
+Do not silently compare unrelated microarchitectures without explaining the limitation.
 
-Bias storage must be reported separately.
+### Configuration B — Dense vector
 
-## 2:4 Sparse Conversion
+Purpose:
 
-Implement deterministic 2:4 structured pruning or projection.
+- measure the hardware cost of dense-vector execution without sparse-specific logic.
 
-For every consecutive four-weight group:
+Include:
 
-- retain exactly two weights;
-- set exactly two weights to zero;
-- retain the two weights with largest absolute magnitude;
-- use a deterministic tie-breaking rule based on lower lane index;
-- encode one of the six legal Sparrow-V metadata patterns;
-- order compressed weights according to the existing VSDOT8 contract;
-- reconstruct the sparse dense-equivalent matrix for validation.
+- scalar/vector interface;
+- shared vector register file;
+- vector scratchpad;
+- `VADD8`;
+- `VDOT8`;
+- `VLOAD32`;
+- `VSTORE32`.
 
-Document the tie-breaking rule.
+Exclude or compile out:
 
-The exporter must verify for every sparse group:
+- `VSDOT8`;
+- sparse metadata decode;
+- sparse executed/skipped accounting that exists solely for sparse execution.
 
-- exactly two retained values;
-- exactly two zeroed values;
-- legal metadata;
-- lower selected lane maps to compressed weight 0;
-- higher selected lane maps to compressed weight 1;
-- decompression reproduces the sparse dense-equivalent group exactly.
+The dense configuration must remain functionally valid and synthesizable.
 
-Do not use invalid metadata encodings.
+### Configuration C — Sparse vector
 
-## Sparse Storage Packing
+Purpose:
 
-Export:
+- measure the complete current Sparrow-V architecture.
 
-- compressed INT8 weights;
-- 3-bit metadata;
-- a documented metadata packing format;
-- deterministic memory images;
-- a manifest describing byte offsets and group association.
+Include:
+
+- everything in the dense-vector configuration;
+- `VSDOT8`;
+- 2:4 metadata decode;
+- compressed sparse arithmetic;
+- sparse executed/skipped accounting.
+
+This configuration must correspond to the verified sparse workload implementation.
+
+## Configuration Mechanism
+
+Use one clean mechanism for selecting configurations.
+
+Preferred options:
+
+- SystemVerilog parameters;
+- documented preprocessor defines;
+- separate synthesis wrappers;
+- explicit source manifests.
+
+Requirements:
+
+- configuration selection must be deterministic;
+- synthesis commands must make the chosen configuration obvious;
+- no manual RTL editing between runs;
+- no duplicated architectural state;
+- no copied and diverging RTL trees.
+
+Do not weaken normal simulation defaults or regressions.
+
+## Functional Preservation
+
+Before collecting synthesis metrics, verify that each configuration is functionally appropriate.
+
+### Scalar baseline
+
+Run a bounded scalar regression.
+
+### Dense vector
+
+Run:
+
+- dense instruction tests;
+- vector-memory tests;
+- dense workload tests;
+- no sparse operation tests.
+
+### Sparse vector
+
+Run:
+
+- complete vector regression;
+- synthetic dense/sparse workload;
+- sensor dense/sparse workload.
+
+If configuration-specific tests are required, add bounded targets.
+
+Do not claim comparable results from a configuration that does not pass its relevant tests.
+
+## Synthesis Flow
+
+Provide a reproducible open-source synthesis flow using Yosys.
+
+At minimum:
+
+- explicit top module;
+- explicit ordered RTL source list;
+- explicit configuration defines or parameters;
+- consistent synthesis script;
+- consistent target technology or generic-cell mapping;
+- generated reports stored under a documented results directory.
+
+Use the same synthesis strategy for all three configurations.
+
+Do not compare one generic synthesis result against one technology-mapped result.
+
+## Technology Basis
+
+Choose and document one primary comparison basis.
+
+Preferred:
+
+### Primary comparison
+
+Yosys generic synthesis:
+
+- generic cell count;
+- flop count;
+- combinational cell count;
+- inferred memory information;
+- logic-depth or timing proxy where available.
+
+### Secondary comparison
+
+Sky130 or another already available open PDK flow, if practical:
+
+- standard-cell area;
+- utilization;
+- setup timing;
+- critical path;
+- power estimate;
+- DRC/LVS status if physical implementation is attempted.
+
+If OpenLane/OpenROAD is unavailable, complete the generic synthesis comparison and clearly record the limitation.
+
+Do not block the entire milestone solely because physical-design tools are not installed.
+
+## Clock and Timing Evaluation
+
+Evaluate timing under consistent constraints.
+
+At minimum use:
+
+- one nominal target, preferably 100 MHz or the repository’s established target;
+- one relaxed target if the nominal target does not close.
 
 Report:
 
-- compressed weight bytes;
-- metadata bits;
-- packed metadata bytes;
-- padding bits;
-- total sparse model bytes;
-- percentage reduction relative to dense weights.
+- target clock period;
+- worst slack;
+- estimated critical path;
+- pass/fail timing status;
+- any unclocked or unconstrained path warnings.
 
-Do not claim a full 50% storage reduction when metadata and padding are included.
+Do not claim Fmax directly from one arbitrary target.
 
-## Python Reference Inference
+If supported, perform a bounded clock sweep to estimate the fastest passing target.
 
-Add or extend an independent Python reference model.
+Use the same sweep methodology for dense and sparse configurations.
 
-For each sample compute:
+## Area and Cell Accounting
 
-1. dense INT32 logits;
-2. sparse dense-equivalent INT32 logits;
-3. compressed sparse INT32 logits;
-4. dense predicted class;
-5. sparse predicted class.
+Report for each configuration:
 
-Require:
+- total synthesized cells;
+- sequential cells;
+- combinational cells;
+- multiplier-related cells where identifiable;
+- mux-related cells where identifiable;
+- inferred memory count and width;
+- vector register file contribution where identifiable;
+- scratchpad contribution where identifiable;
+- standard-cell area if mapped.
 
-```text
-sparse dense-equivalent logits == compressed sparse logits
-```
+Also derive:
 
-Dense and sparse logits are allowed to differ because pruning changes the mathematical model.
+- dense-vector overhead relative to scalar;
+- sparse-vector overhead relative to dense;
+- full sparse-vector overhead relative to scalar.
 
-The exporter must report:
+Use both absolute and percentage values.
 
-- dense logits;
-- sparse logits;
-- dense predicted class;
-- sparse predicted class;
-- expected label;
-- whether each prediction is correct.
+## Memory Accounting
 
-Do not require dense and sparse logits to be identical after pruning.
+The vector scratchpad and vector register file may synthesize differently depending on the tool and target.
 
-## Accuracy Reporting
+Document whether each structure becomes:
 
-For the checked-in sample set, report:
+- inferred memory;
+- flip-flops and muxes;
+- latch-based memory;
+- technology memory macro;
+- unsupported black box.
 
-- dense correct predictions;
-- dense accuracy;
-- sparse correct predictions;
-- sparse accuracy;
-- number of dense/sparse prediction disagreements;
-- per-class sample counts;
-- per-class correct counts where practical.
+Do not present flip-flop-expanded memory area as equivalent to a realistic SRAM macro without qualification.
 
-Clearly label this as:
+Where useful, report:
 
-- fixture accuracy;
-- deployment-set accuracy;
-- or dataset-subset accuracy,
+- logic excluding memory;
+- memory bits;
+- total mapped result.
 
-depending on the actual provenance.
+## Power Evaluation
 
-Do not present it as general model accuracy unless evaluated on a documented dataset split.
+If the flow supports a credible estimate, report:
 
-## Sparrow-V Program Generation
+- total estimated power;
+- dynamic power;
+- leakage power;
+- clock assumptions;
+- switching-activity assumptions;
+- whether activity is vectorless or workload-derived.
 
-Reuse the existing bare-metal workload infrastructure where practical.
+If only vectorless estimates are available, label them clearly.
 
-The exporter or generator must create deterministic artifacts for:
+Do not claim measured silicon power or workload energy.
 
-- dense execution;
-- sparse execution;
-- each selected sensor sample or a bounded batch sequence.
+If power estimation is unavailable or unreliable, state that and do not fabricate a value.
 
-Preferred approach:
+## Workload Performance Integration
 
-- reuse one parameterized program structure;
-- regenerate data images per sample;
-- avoid producing a large unrelated program for every sample when one reusable program is sufficient.
+Combine the existing measured cycle counts with synthesis results.
 
-The generated program must:
+At minimum report for the synthetic FC workload and sensor workload:
 
-- load 16 activation features;
-- compute four output logits;
-- add each bias once;
-- write four signed INT32 outputs;
-- write one completion signature;
-- optionally write the predicted class if cleanly supported.
-
-Do not add new ISA instructions unless a genuine existing capability gap blocks the milestone.
-
-## RTL End-to-End Execution
-
-Run dense and sparse inference through:
-
-```text
-rtl/core/rv32_core_pipe.sv
-```
-
-Requirements:
-
-- actual instruction fetch and execution;
-- actual VLOAD32 operations;
-- actual VDOT8 or VSDOT8 operations;
-- actual scalar accumulation and result storage;
-- deterministic completion detection;
-- bounded timeout;
-- no direct calls into the vector engine from the workload testbench.
-
-For every sample verify:
-
-- four RTL logits;
-- exact agreement with the corresponding Python reference;
-- predicted class agreement with Python;
-- no unexpected trap;
-- exactly one completion signature.
-
-## Multi-Sample Execution Strategy
-
-Use one of these bounded strategies:
-
-### Preferred
-
-Run each sample as an independent deterministic simulation invocation.
-
-### Acceptable
-
-Run multiple samples sequentially in one simulation only if:
-
-- state is reset or explicitly reinitialized;
-- counters are separated per sample;
-- output attribution remains unambiguous.
-
-Do not introduce complex batching infrastructure.
-
-## Required Metrics
-
-For dense and sparse RTL execution, report per sample:
-
-- cycles;
+- scalar cycles where available;
+- dense-vector cycles;
+- sparse-vector cycles;
+- target or estimated clock frequency;
+- estimated latency;
 - retired instructions;
-- VLOAD32 retirements;
-- VDOT8 retirements;
-- VSDOT8 retirements;
-- sparse executed multiplications;
-- sparse skipped multiplications;
-- completion status;
-- predicted class.
+- multiplications executed;
+- multiplications skipped;
+- weight storage.
 
-Also report aggregate values:
+Clearly distinguish:
 
-- minimum cycles;
-- maximum cycles;
-- mean cycles;
-- total retired instructions;
-- total dense dot products;
-- total sparse dot products;
-- total sparse executed multiplications;
-- total sparse skipped multiplications.
+- measured RTL cycle counts;
+- synthesis-derived frequency;
+- calculated latency.
 
-If deterministic program paths make cycle counts identical across samples, report that explicitly.
+## Area-Normalized Metrics
 
-## Expected Operation Counts
+Calculate bounded architecture-comparison metrics.
 
-For a 16-input, 4-output single fully connected layer:
+At minimum:
+
+### Throughput proxy
 
 ```text
-4 groups per output × 4 outputs = 16 dot-product instructions
+1 / workload latency
 ```
 
-Dense execution must report per sample:
-
-- 16 VDOT8 operations;
-- 64 conceptual signed INT8 multiplications;
-- 0 VSDOT8 operations.
-
-Sparse execution must report per sample:
-
-- 16 VSDOT8 operations;
-- 32 executed signed INT8 multiplications;
-- 32 skipped multiplications;
-- 0 VDOT8 operations.
-
-Any deviation must fail the test unless the program structure is intentionally changed and documented.
-
-## Correctness Requirements
-
-For every checked-in sample:
-
-- Python dense logits are deterministic;
-- Python sparse logits are deterministic;
-- RTL dense logits equal Python dense logits;
-- RTL sparse logits equal Python sparse logits;
-- RTL dense prediction equals Python dense prediction;
-- RTL sparse prediction equals Python sparse prediction;
-- no unexpected trap occurs;
-- outputs remain within signed INT32;
-- completion occurs before timeout.
-
-## Export Manifest
-
-Generate one deterministic manifest containing:
-
-- model name and version;
-- sample-set name and version;
-- feature count;
-- class count;
-- dense weight bytes;
-- compressed sparse weight bytes;
-- metadata bytes;
-- bias bytes;
-- memory image paths;
-- scratchpad offsets;
-- output addresses;
-- program image paths;
-- expected operation counts;
-- optional content hashes.
-
-Preferred format:
+### Area-normalized throughput proxy
 
 ```text
-JSON
+throughput / synthesized area
 ```
 
-Paths must be repository-relative where practical.
-
-Do not include machine-specific absolute paths.
-
-## Reproducibility
-
-The full export must be reproducible from checked-in source inputs.
-
-One command must regenerate all generated workload artifacts.
-
-Example target:
+If only generic cell count is available, use:
 
 ```text
-make generate-sensor-workload
+throughput / generic cell count
 ```
 
-After regeneration:
+and label it as a proxy.
 
-- `git diff --exit-code` should remain clean for checked-in generated artifacts;
-- or generated artifacts must be ignored and compared through deterministic tests.
+Also report:
 
-Choose one policy and document it.
+- cycle speedup relative to scalar;
+- instruction reduction relative to scalar;
+- sparse arithmetic reduction relative to dense;
+- sparse storage reduction relative to dense;
+- sparse area overhead relative to dense.
 
-## Validation of Existing Benchmark
+Do not combine incomparable technology or configuration results.
 
-Preserve the previous synthetic FC benchmark and its verified metrics.
+## Key Research Observation
 
-Do not replace or silently alter:
+The current dense and sparse workloads have equal cycle counts even though sparse execution halves multiplication work.
 
-- the `[382, -446, -246, 1054]` reference workload;
-- scalar, dense, or sparse benchmark definitions;
-- existing cycle-count scope;
-- existing regressions.
+The milestone must report this honestly.
 
-The sensor deployment flow must be additive.
+Investigate only enough to identify the current reason, such as:
+
+- equal fixed execution latency;
+- load count;
+- command/completion latency;
+- scalar accumulation;
+- instruction schedule;
+- vector-engine state-machine behavior.
+
+Do not redesign the architecture in this milestone.
+
+Record the finding as a limitation and a future experimental direction.
+
+## Reproducible Commands
+
+Add stable targets following repository conventions, including equivalents of:
+
+```text
+synth-scalar
+synth-vector-dense
+synth-vector-sparse
+synth-compare
+test-config-scalar
+test-config-dense
+test-config-sparse
+ppa-report
+ppa-all
+```
+
+Exact names may be adjusted.
+
+One aggregate command must regenerate the final comparison reports.
+
+Example:
+
+```text
+make ppa-all
+```
+
+The aggregate target must:
+
+1. validate required tools;
+2. synthesize all three configurations;
+3. extract metrics;
+4. generate a machine-readable report;
+5. generate a human-readable comparison table;
+6. fail clearly on missing or malformed results.
+
+## Results Artifacts
+
+Generate deterministic results under a documented directory, for example:
+
+```text
+results/ppa/
+```
+
+Include:
+
+- raw Yosys reports;
+- source manifests;
+- synthesis logs or concise report extracts;
+- machine-readable JSON or CSV summary;
+- Markdown comparison report;
+- tool-version information;
+- configuration metadata;
+- clock constraints.
+
+Do not commit huge temporary tool directories or unnecessary intermediate files.
+
+Choose and document which result artifacts are tracked.
+
+## Machine-Readable Summary
+
+Generate a JSON or CSV summary containing at least:
+
+- configuration name;
+- top module;
+- defines or parameters;
+- tool version;
+- target technology;
+- target clock;
+- timing slack;
+- cell count;
+- sequential cells;
+- combinational cells;
+- memory bits;
+- mapped area if available;
+- estimated power if available;
+- workload cycles;
+- estimated latency;
+- area-normalized throughput proxy.
+
+Repository-relative paths only.
+
+## Human-Readable Comparison
+
+Produce one primary table:
+
+| Metric | Scalar | Dense Vector | Sparse Vector |
+|---|---:|---:|---:|
+| Total cells or area | | | |
+| Sequential cells | | | |
+| Combinational cells | | | |
+| Memory bits | | | |
+| Target clock | | | |
+| Worst slack | | | |
+| Timing status | | | |
+| Estimated power | | | |
+| FC workload cycles | | | |
+| Sensor workload cycles | | | |
+| Retired instructions | | | |
+| Multiplies executed | | | |
+| Multiplies skipped | | | |
+| Weight storage | | | |
+| Area-normalized throughput | | | |
+
+Use `N/A` rather than inventing unavailable values.
+
+## Documentation Requirements
+
+Add a synthesis and PPA evaluation document.
+
+Document:
+
+- all three configurations;
+- exact source and define differences;
+- synthesis flow;
+- tool versions;
+- technology assumptions;
+- clock constraints;
+- memory-inference behavior;
+- area results;
+- timing results;
+- power assumptions;
+- workload integration;
+- area-normalized metrics;
+- sparse overhead;
+- limitations;
+- future optimization opportunities.
+
+Update:
+
+- `docs/implementation_status.md`;
+- `docs/verification_plan.md`;
+- `docs/milestone_history.md`;
+- README with stable commands and headline results only after validation.
+
+Do not claim signoff readiness, tapeout readiness, or physical closure unless actually achieved.
 
 ## Out of Scope
 
 Do not implement:
 
-- full SparrowML;
-- model training framework;
-- neural-network architecture search;
-- quantization-aware training;
-- knowledge distillation;
-- ONNX import;
-- compiler IR;
-- LLVM or GCC backend;
-- full C runtime;
-- convolution;
-- recurrent networks;
-- multi-layer inference unless trivially supported without new RTL;
-- activation functions requiring new ISA support;
-- automatic dataset download;
-- internet-dependent tests;
-- floating point;
-- dynamic tensor shapes;
-- configurable vector length;
-- wider vector registers;
-- new architectural CSRs;
-- DMA, caches, or external memory;
-- FPGA or ASIC flow;
+- new vector instructions;
+- sparse-load instructions;
+- fused operations;
+- wider vectors;
+- caches;
+- DMA;
+- AXI;
+- operating system support;
+- compiler backend;
+- new ML models;
+- new training pipeline;
+- timing-driven RTL redesign;
+- broad retiming;
+- floorplan experimentation beyond one bounded baseline;
+- signoff extraction;
+- real silicon power;
+- tapeout claims;
 - changes to `rtl/core/rv32_core.sv`.
 
-## Focused Tests
+## Focused Validation
 
-Add focused tests for:
+Add focused checks for:
 
-### Model parser
+### Configuration manifests
 
-- valid model;
-- invalid dimensions;
-- signed INT8 overflow;
-- signed INT32 bias overflow;
-- unsupported format version;
-- class-name mismatch.
+- scalar excludes vector logic;
+- dense excludes sparse logic;
+- sparse includes all intended logic;
+- no testbench or simulation-only files enter synthesis;
+- source order is deterministic.
 
-### Sample parser
+### Synthesis reports
 
-- valid samples;
-- wrong feature count;
-- out-of-range values;
-- unknown labels;
-- duplicate IDs if disallowed.
+- all expected reports exist;
+- no configuration silently uses the wrong top;
+- no unintended black boxes;
+- no latches unless deliberately documented;
+- no synthesis fatal errors;
+- metrics parse correctly.
 
-### 2:4 conversion
+### Comparison script
 
-- all six metadata patterns;
-- deterministic tie-breaking;
-- positive and negative weights;
-- zero-valued weights;
-- `-128`;
-- `127`;
-- exact decompression;
-- exactly two retained values per group.
+- handles all three configurations;
+- rejects missing fields;
+- preserves units;
+- calculates percentages correctly;
+- labels unavailable metrics as `N/A`;
+- produces deterministic output.
 
-### Storage accounting
+### Functional preservation
 
-- dense bytes;
-- compressed bytes;
-- metadata bits;
-- packed metadata bytes;
-- padding;
-- total sparse bytes;
-- percentage reduction.
-
-### Python inference
-
-- dense logits;
-- sparse logits;
-- compressed/decompressed sparse equality;
-- argmax;
-- label comparison;
-- deterministic accuracy summary.
-
-### Artifact generation
-
-- deterministic program images;
-- deterministic data images;
-- deterministic manifest;
-- valid memory bounds;
-- no machine-specific paths.
-
-### RTL dense inference
-
-For all selected samples:
-
-- exact logits;
-- correct predicted class;
-- 16 VDOT8;
-- 0 VSDOT8;
-- expected VLOAD32 count;
-- no sparse executed/skipped events;
-- one completion signature.
-
-### RTL sparse inference
-
-For all selected samples:
-
-- exact logits;
-- correct predicted class;
-- 0 VDOT8;
-- 16 VSDOT8;
-- 32 executed multiplications;
-- 32 skipped multiplications;
-- expected VLOAD32 count;
-- one completion signature.
-
-### Aggregate comparison
-
-Report:
-
-- dense and sparse accuracy;
-- disagreement count;
-- dense and sparse cycle summaries;
-- storage comparison;
-- operation comparison.
-
-## Canonical Targets
-
-Add targets following repository conventions, including equivalents of:
-
-```text
-generate-sensor-workload
-test-sensor-model-parser
-test-sensor-sparsify
-test-sensor-golden
-test-sensor-export
-test-sensor-dense
-test-sensor-sparse
-test-sensor-compare
-test-sensor-all
-```
-
-Exact names may be adjusted to match the repository.
-
-Do not force the full multi-sample workload into every focused RTL test.
-
-Include it in:
-
-- a dedicated sensor-workload aggregate target;
-- and the final full regression if runtime remains reasonable.
+- scalar configuration tests pass;
+- dense configuration tests pass;
+- sparse configuration tests pass;
+- previous workload and sensor tests remain passing.
 
 ## Final Acceptance Regression
 
-During development, run focused parser, exporter, golden-model, and sample-level tests.
+During development, run only focused configuration and synthesis targets.
 
 After implementation is stable, run once:
 
 ```text
-make test-sensor-all
+make test-config-scalar
+make test-config-dense
+make test-config-sparse
+make ppa-all
 make test-workload-all
+make test-sensor-all
 make test-vector-regression
 make test-full-regression
 make lint
@@ -664,133 +609,98 @@ make docs-check
 git diff --check
 ```
 
+If physical-design tools are available, also run the documented bounded physical-flow target.
+
 ## Acceptance Criteria
 
 The milestone is complete only when:
 
-1. A stable model input format exists.
-2. A stable sensor-sample format exists.
-3. The model uses 16 signed INT8 input features.
-4. The model produces 4 signed INT32 logits.
-5. At least 16 deterministic samples exist.
-6. Every model and sample input is range-validated.
-7. Dense weights export deterministically.
-8. Deterministic 2:4 pruning or projection exists.
-9. Tie-breaking is documented.
-10. Every sparse group retains exactly two weights.
-11. Every sparse group uses legal metadata.
-12. Compressed-weight ordering matches VSDOT8.
-13. Sparse decompression is exact.
-14. Dense storage bytes are reported.
-15. Compressed weight bytes are reported.
-16. Metadata bits and packed bytes are reported.
-17. Total sparse storage is reported honestly.
-18. Python dense inference works.
-19. Python sparse inference works.
-20. Compressed sparse inference equals decompressed sparse inference.
-21. Dense predicted classes are reported.
-22. Sparse predicted classes are reported.
-23. Expected labels are reported.
-24. Dense and sparse accuracy are reported with correct scope.
-25. A deterministic export manifest exists.
-26. Dense program/data artifacts are generated.
-27. Sparse program/data artifacts are generated.
-28. Artifacts use repository-relative paths.
-29. Generation is reproducible.
-30. Dense RTL execution runs through the real pipeline.
-31. Sparse RTL execution runs through the real pipeline.
-32. Dense RTL logits equal Python dense logits for every sample.
-33. Sparse RTL logits equal Python sparse logits for every sample.
-34. Dense predicted classes match Python for every sample.
-35. Sparse predicted classes match Python for every sample.
-36. No unexpected trap occurs.
-37. Every sample completes before timeout.
-38. Dense execution reports 16 VDOT8 operations per sample.
-39. Sparse execution reports 16 VSDOT8 operations per sample.
-40. Sparse execution reports 32 executed multiplications per sample.
-41. Sparse execution reports 32 skipped multiplications per sample.
-42. Dense execution reports no sparse accounting events.
-43. Per-sample cycles and retired instructions are reported.
-44. Aggregate cycle statistics are reported.
-45. Dense/sparse prediction disagreements are reported.
-46. Previous synthetic workload remains passing.
-47. Existing scalar and vector regressions remain passing.
-48. Documentation distinguishes fixture results from real dataset claims.
-49. No internet-dependent test is added.
-50. No new ISA, cache, DMA, compiler backend, or broad RTL redesign is added.
-51. `rtl/core/rv32_core.sv` remains unchanged.
-52. Codex creates no commit or push.
-53. `docs/codex_milestone_result.md` is finalized.
+1. Three explicit hardware configurations exist.
+2. Scalar, dense-vector, and sparse-vector configurations are reproducible.
+3. No manual RTL editing is required between configurations.
+4. Scalar excludes vector hardware.
+5. Dense includes dense-vector hardware.
+6. Dense excludes sparse-specific hardware.
+7. Sparse includes complete VSDOT8 support.
+8. Relevant functional tests pass for all configurations.
+9. One consistent Yosys synthesis flow exists.
+10. All configurations use the same synthesis methodology.
+11. Source manifests are explicit and deterministic.
+12. Simulation-only files are excluded.
+13. Synthesis succeeds for all three configurations.
+14. No unintended black boxes remain.
+15. Total cell or area metrics are reported.
+16. Sequential and combinational metrics are reported.
+17. Memory bits and inference behavior are reported.
+18. Dense overhead relative to scalar is calculated.
+19. Sparse overhead relative to dense is calculated.
+20. Sparse overhead relative to scalar is calculated.
+21. One consistent clock constraint is used.
+22. Timing results are reported for all configurations.
+23. Timing failures are reported honestly.
+24. Estimated Fmax is not overstated.
+25. Power is reported only if credibly available.
+26. Power assumptions are documented.
+27. Existing workload cycles are integrated.
+28. Estimated workload latency is calculated consistently.
+29. Area-normalized throughput proxy is reported.
+30. Measured and derived values are distinguished.
+31. Equal dense/sparse cycle counts are reported honestly.
+32. The reason for equal latency is identified at a bounded level.
+33. Machine-readable summary exists.
+34. Human-readable comparison exists.
+35. Tool versions are recorded.
+36. Reproduction commands are documented.
+37. Previous synthetic workload remains passing.
+38. Sensor workload remains passing.
+39. Existing scalar and vector regressions remain passing.
+40. No new ISA or broad RTL optimization is added.
+41. `rtl/core/rv32_core.sv` remains unchanged.
+42. Codex creates no commit or push.
+43. `docs/codex_milestone_result.md` is finalized.
 
 ## Stop Conditions
 
 Stop for human review only if:
 
-- the existing FC program cannot accept regenerated model data without major RTL changes;
-- the 256-byte scratchpad cannot support one sample using separated deterministic runs;
-- accurate multi-sample execution requires new ISA operations;
-- model dimensions cannot fit existing memory or instruction encoding;
-- dense or sparse logits cannot be reproduced by the existing arithmetic semantics;
-- adding the exporter requires a compiler framework rather than a bounded script;
-- a likely existing CPU, vector, or workload correctness bug is discovered;
-- the only available route requires internet-dependent tests.
+- a clean scalar/dense/sparse configuration split requires major architectural restructuring;
+- the dense and sparse implementations cannot be isolated without duplicating state;
+- synthesis reveals an unintended latch or combinational loop requiring broad RTL redesign;
+- all available synthesis flows fail on valid SystemVerilog despite bounded frontend fixes;
+- timing analysis is impossible because the design lacks a definable clock boundary;
+- the chosen scalar baseline is fundamentally incomparable to the vector configurations;
+- a likely existing functional correctness issue is discovered;
+- physical-flow work would require major RTL redesign.
 
-Ordinary parser bugs, packing bugs, memory-layout changes, testbench issues, and documentation work are not stop conditions.
+Ordinary synthesis-script bugs, define problems, parser issues, report extraction bugs, and documentation work are not stop conditions.
 
-## Required Documentation
+## Required Result File
 
-Update only materially affected files, normally:
+Update:
 
-- a new sensor deployment architecture document;
-- `docs/implementation_status.md`;
-- `docs/verification_plan.md`;
-- `docs/milestone_history.md`;
-- README only if stable public commands are added.
+```text
+docs/codex_milestone_result.md
+```
 
-Document:
-
-- model and sample formats;
-- fixture or dataset provenance;
-- class names;
-- quantized tensor layout;
-- 2:4 pruning rule;
-- tie-breaking;
-- compressed-weight layout;
-- metadata packing;
-- memory map;
-- exporter command;
-- manifest format;
-- Python inference methodology;
-- RTL execution methodology;
-- per-sample and aggregate results;
-- dense and sparse accuracy scope;
-- storage accounting;
-- operation accounting;
-- limitations and non-claims.
-
-Do not describe the fixture as a trained production model unless that is genuinely true and documented.
-
-## Result File
-
-Update `docs/codex_milestone_result.md` throughout the run.
+throughout the run.
 
 Finalize it with:
 
-- `STATUS: COMPLETE`, `STATUS: BLOCKED`, or `STATUS: FAILED`;
-- model and sample-set names;
-- provenance description;
-- sample count;
-- class names;
-- dense and sparse accuracy;
-- disagreement count;
-- dense and sparse storage;
-- per-sample operation counts;
-- aggregate cycle and retirement metrics;
-- exact test commands;
+- `STATUS: COMPLETE`, `STATUS: FAILED`, or `STATUS: BLOCKED`;
+- configuration definitions;
+- synthesis tool and version;
+- target technology;
+- clock constraints;
+- exact area or cell metrics;
+- timing results;
+- power results or explicit unavailability;
+- workload latency calculations;
+- sparse overhead;
+- area-normalized metrics;
+- exact commands and outcomes;
 - changed files;
-- bugs fixed;
 - remaining limitations;
-- confirmation that the previous FC benchmark still passes;
-- confirmation that existing scalar/vector regressions pass;
+- whether physical implementation was run;
+- confirmation that previous workload and sensor regressions pass;
 - confirmation that `rtl/core/rv32_core.sv` is unchanged;
 - confirmation that no commit or push occurred.
