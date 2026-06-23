@@ -4,7 +4,7 @@ set -euo pipefail
 
 CODEX_BIN="${CODEX_BIN:-codex}"
 CODEX_ARGS=(exec --sandbox workspace-write)
-RESULT_FILE=.codex/milestone_result.md
+RESULT_FILE=docs/codex_milestone_result.md
 required=(AGENTS.md docs/codex_context.md docs/current_milestone.md docs/codex_milestone_prompt.md)
 
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
@@ -25,16 +25,12 @@ if [[ -n $(git status --porcelain) ]]; then
   echo "warning: working tree already contains changes; preserve unrelated work" >&2
 fi
 
-mkdir -p .codex
 started_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 printf 'STATUS: IN_PROGRESS\nMILESTONE: %s\nSTARTED_AT: %s\n\n' "${title:-unknown}" "$started_at" >"$RESULT_FILE"
 
 handle_interrupt() {
   local signal=$1
-  local interrupted_at
-  interrupted_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  printf 'INTERRUPTED_AT: %s\nINTERRUPTION_SIGNAL: %s\n' "$interrupted_at" "$signal" >>"$RESULT_FILE"
-  echo "warning: milestone run interrupted by $signal; leaving $RESULT_FILE IN_PROGRESS" >&2
+  echo "warning: milestone run interrupted by $signal; leaving $RESULT_FILE intact" >&2
   exit 130
 }
 trap 'handle_interrupt INT' INT
@@ -50,7 +46,10 @@ set -e
 
 if [[ ! -f "$RESULT_FILE" ]]; then
   echo "error: internal launcher error: Codex result file is absent: $RESULT_FILE" >&2
-  exit "$codex_status"
+  if (( codex_status != 0 )); then
+    exit "$codex_status"
+  fi
+  exit 1
 fi
 
 status=$(sed -n 's/^STATUS: \([^[:space:]]*\).*$/\1/p' "$RESULT_FILE" | head -n 1)

@@ -1,0 +1,17 @@
+{
+  "model_name": "sparrow_vibration_fixture",
+  "format_version": 1,
+  "data_layout_version": 1,
+  "input_features": 16,
+  "output_classes": 4,
+  "class_names": ["normal", "inner", "outer", "ball"],
+  "weights_int8": [
+    [12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1],
+    [1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2],
+    [-2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3],
+    [3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12, 3, -2, 1, 12]
+  ],
+  "bias_int32": [17, -23, 31, -37],
+  "feature_scaling": {"encoding": "signed_int8_raw"},
+  "provenance_note": "Deterministic checked-in sensor-classification fixture; not trained from a public dataset and not a general accuracy claim."
+}

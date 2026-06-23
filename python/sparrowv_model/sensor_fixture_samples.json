@@ -1,0 +1,23 @@
+{
+  "sample_set_name": "sparrow_vibration_fixture_eval",
+  "format_version": 1,
+  "fixture_note": "Deterministic deployment fixture, not a dataset split.",
+  "samples": [
+    {"sample_id": "normal_00", "features_int8": [20,0,0,0,20,0,0,0,20,0,0,0,20,0,0,0], "expected_label": "normal"},
+    {"sample_id": "normal_01", "features_int8": [18,1,-1,0,19,0,1,-1,21,-1,0,1,20,1,-1,0], "expected_label": "normal"},
+    {"sample_id": "normal_02", "features_int8": [127,-128,0,0,127,-128,0,0,127,-128,0,0,127,-128,0,0], "expected_label": "normal"},
+    {"sample_id": "normal_03", "features_int8": [10,2,0,-1,11,1,-1,0,9,0,1,-1,12,-1,0,1], "expected_label": "normal"},
+    {"sample_id": "inner_00", "features_int8": [0,20,0,0,0,20,0,0,0,20,0,0,0,20,0,0], "expected_label": "inner"},
+    {"sample_id": "inner_01", "features_int8": [1,19,-1,0,0,21,1,-1,-1,20,0,1,1,18,-1,0], "expected_label": "inner"},
+    {"sample_id": "inner_02", "features_int8": [0,127,-128,0,0,127,-128,0,0,127,-128,0,0,127,-128,0], "expected_label": "inner"},
+    {"sample_id": "inner_03", "features_int8": [-1,11,1,0,0,10,-1,1,1,12,0,-1,-1,9,1,0], "expected_label": "inner"},
+    {"sample_id": "outer_00", "features_int8": [0,0,20,0,0,0,20,0,0,0,20,0,0,0,20,0], "expected_label": "outer"},
+    {"sample_id": "outer_01", "features_int8": [-1,1,19,0,0,-1,21,1,1,0,20,-1,-1,1,18,0], "expected_label": "outer"},
+    {"sample_id": "outer_02", "features_int8": [0,0,127,-128,0,0,127,-128,0,0,127,-128,0,0,127,-128], "expected_label": "outer"},
+    {"sample_id": "outer_03", "features_int8": [1,0,10,-1,-1,1,11,0,0,-1,9,1,1,0,12,-1], "expected_label": "outer"},
+    {"sample_id": "ball_00", "features_int8": [0,0,0,20,0,0,0,20,0,0,0,20,0,0,0,20], "expected_label": "ball"},
+    {"sample_id": "ball_01", "features_int8": [0,-1,1,19,1,0,-1,21,-1,1,0,20,0,-1,1,18], "expected_label": "ball"},
+    {"sample_id": "ball_02", "features_int8": [-128,0,0,127,-128,0,0,127,-128,0,0,127,-128,0,0,127], "expected_label": "ball"},
+    {"sample_id": "ball_03", "features_int8": [1,0,-1,10,-1,1,0,11,0,-1,1,9,1,0,-1,12], "expected_label": "ball"}
+  ]
+}

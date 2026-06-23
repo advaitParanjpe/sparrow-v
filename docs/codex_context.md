@@ -78,7 +78,7 @@ Details: [architecture overview](architecture.md),
    `docs/current_milestone.md`, then commits that definition.
 2. Run `./scripts/run_milestone.sh` from a normal terminal for one primary
    Codex implementation session.
-3. Review `.codex/milestone_result.md` and the Git diff. Request a focused
+3. Review `docs/codex_milestone_result.md` and the Git diff. Request a focused
    repair only for a concrete finding; a separate read-only Codex audit is not
    the normal path.
 4. Human review and a manual commit remain required.

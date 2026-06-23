@@ -720,7 +720,7 @@ The milestone is complete only when:
 50. No new ISA, cache, DMA, compiler backend, or broad RTL redesign is added.
 51. `rtl/core/rv32_core.sv` remains unchanged.
 52. Codex creates no commit or push.
-53. `.codex/milestone_result.md` is finalized.
+53. `docs/codex_milestone_result.md` is finalized.
 
 ## Stop Conditions
 
@@ -772,7 +772,7 @@ Do not describe the fixture as a trained production model unless that is genuine
 
 ## Result File
 
-Update `.codex/milestone_result.md` throughout the run.
+Update `docs/codex_milestone_result.md` throughout the run.
 
 Finalize it with:
 

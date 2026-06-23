@@ -70,6 +70,12 @@
   and `test-workload-all` require identical outputs, one completion signature,
   no trap, and exact per-kernel retirement/activity accounting. These bounded
   tests are included in `test-vector-regression`.
+- Sensor deployment targets: `test-sensor-export` validates model/sample
+  rejection paths, all sparse metadata patterns, tie-breaking, packing,
+  inference, and deterministic artifact generation. `test-sensor-rtl-dense`
+  and `test-sensor-rtl-sparse` independently run all 16 generated fixture
+  samples on `rv32_core_pipe`; `test-sensor-workload` aggregates them and is
+  included in `test-vector-regression`.
 
 ## Completion rule
 

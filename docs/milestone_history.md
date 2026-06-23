@@ -2,6 +2,15 @@
 
 Append completed, human-reviewed milestones below. Pending-review implementation evidence must be explicitly marked and must not imply a commit. Do not reconstruct or invent prior entries.
 
+### Hardware-Aware Model Exporter and Multi-Sample Sensor Inference — implementation complete, pending human review — 2026-06-23
+
+- Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
+- Summary: added a deterministic JSON sensor-classification fixture, strict model/sample validation, deterministic magnitude-based 2:4 projection with lower-lane tie-breaking, dense/compressed images, metadata packing, manifests, independent Python inference, and per-sample RTL execution through the experimental pipeline.
+- Tests and measurements: 16 samples run independently in each dense and sparse mode. Both paths report 16/16 fixture-correct predictions; every invocation reports 484 cycles, 109 retired instructions, 32 `VLOAD32`, and one completion. Dense executes 16 `VDOT8`/64 conceptual multiplications; sparse executes 16 `VSDOT8`/32 observed executed plus 32 observed skipped multiplications. Dense weight storage is 64 bytes; compressed weights plus packed metadata are 38 bytes (40.625% reduction).
+- Documentation: `docs/architecture/sensor_workload_export.md` records source format, layout, packing, reproducibility, and scope.
+- Known limitations: this is a deterministic deployment fixture, not a public dataset evaluation or general model-quality claim; `rv32_core_pipe` remains experimental and unpromoted.
+- Follow-up work: human review and manual commit decision.
+
 ### Bare-Metal Sparse Kernel and Scalar vs Dense vs Sparse Evaluation — implementation complete, pending human review — 2026-06-23
 
 - Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
@@ -40,7 +49,7 @@ Append completed, human-reviewed milestones below. Pending-review implementation
 - Reference: uncommitted working-tree implementation evidence; no commit or human acceptance yet.
 - Summary: added a separate real vector endpoint with 32 writable 32-bit registers and Custom-0 `funct3=011` `VADD8`. The operation reads two vector sources, wraps four 8-bit sums, and writes its destination exactly on completion handshake; stub adapter coverage remains unchanged.
 - Key files: `rtl/vector/rv32_vec_vadd_engine.sv`, `rtl/core/rv32_core_pipe.sv`, `tb/integration/tb_vector_vadd.sv`, `Makefile`, and vector/protocol/verification documentation.
-- Tests run and measured results: vector directed/alias/register-file, command and completion backpressure, reset cancellation, and 32-operation deterministic golden-model sequence passed; full final regression evidence is recorded in `.codex/milestone_result.md`.
+- Tests run and measured results: vector directed/alias/register-file, command and completion backpressure, reset cancellation, and 32-operation deterministic golden-model sequence passed; full final regression evidence is recorded in `docs/codex_milestone_result.md`.
 - Known limitations: experimental encoding only; no vector memory, INT16, other arithmetic, masks, reductions, sparse metadata, formal verification, or promotion of `rv32_core_pipe`.
 - Follow-up work: human review and commit decision; any vector ISA expansion requires a separate approved milestone.
 

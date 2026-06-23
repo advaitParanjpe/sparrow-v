@@ -59,7 +59,7 @@ make test-full-regression
 Define a concise milestone externally, place it in
 `docs/current_milestone.md`, and commit that definition. Run
 `./scripts/run_milestone.sh` from the repository root for one primary Codex
-implementation session. Review `.codex/milestone_result.md` and the Git diff;
+implementation session. Review `docs/codex_milestone_result.md` and the Git diff;
 ask for a focused repair only when there is a concrete finding. A separate
 read-only Codex completion audit is not the normal path. Human review and a
 manual commit remain required.

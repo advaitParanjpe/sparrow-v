@@ -31,7 +31,7 @@ feature work outside the active milestone.
    stable. If a late correction is bounded, rerun affected focused tests and
    only the necessary aggregate regression.
 7. Review the final diff, update only materially affected documentation, and
-   write `.codex/milestone_result.md`.
+   write `docs/codex_milestone_result.md`.
 8. Stop only at completion or a documented human-review condition.
 
 A partial implementation without a genuine documented stop condition is not a
@@ -60,7 +60,7 @@ Update README only for public usage changes and ADRs only for architectural
 decisions.
 
 Keep the final response short; do not restate the milestone. The authoritative
-compact handoff is `.codex/milestone_result.md`, overwritten for each
+compact handoff is `docs/codex_milestone_result.md`, overwritten for each
 milestone. It must honestly record status, changed files, focused/final checks,
 meaningful measurements, bugs, stop condition, diff findings, reference-core
 status, and commit/push status.

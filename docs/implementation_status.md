@@ -57,6 +57,14 @@
   `[382,-446,-246,1054]`; exact layout, encodings, and measured counters are
   in `docs/architecture/sparse_fc_workload.md`, with focused targets
   `make test-workload-{encoder,golden,scalar,dense,sparse,compare,all}`.
+- A separate deterministic sensor-classification deployment fixture validates a
+  stable JSON model/sample format, projects dense INT8 weights to legal 2:4
+  `VSDOT8` groups, emits ignored reproducible data/program images and JSON
+  manifest/report artifacts, and runs 16 samples independently in dense and
+  sparse modes through `rv32_core_pipe`. `make test-sensor-workload` verifies
+  logits, predictions, completion, vector retirement counts, and sparse
+  execute/skip events. This is fixture accuracy only; it is not a public
+  dataset or general model-quality claim.
 
 ## Planned, not implemented
 

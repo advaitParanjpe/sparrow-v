@@ -4,7 +4,7 @@ RTL_SOURCES := $(shell find rtl -name '*.sv' | sort)
 SCALAR_TB := tb/integration/tb_scalar_core.sv
 SIM_BUILD := sim/build
 
-.PHONY: help check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline check-scalar-throughput-experiment test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-cpl-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path test-scalar-pipe-vec-stub-all test-vector-regfile test-vector-vadd-directed test-vector-vadd-alias test-vector-vadd-backpressure test-vector-vadd-reset test-vector-vadd-random test-vector-vadd-invalid test-vector-vadd-all test-vector-vdot-directed test-vector-vdot-backpressure test-vector-vdot-reset test-vector-vdot-redirect test-vector-vdot-random test-vector-vdot-invalid test-vector-vdot-all test-vector-scratchpad test-vector-vmem-directed test-vector-vmem-backpressure test-vector-vmem-reset test-vector-vmem-redirect test-vector-vmem-errors test-vector-vmem-random test-vector-vmem-all test-vector-vsdot-patterns test-vector-vsdot-directed test-vector-vsdot-backpressure test-vector-vsdot-reset test-vector-vsdot-redirect test-vector-vsdot-invalid test-vector-vsdot-random test-vector-vsdot-all test-workload-encoder test-workload-golden test-workload-scalar test-workload-dense test-workload-sparse test-workload-compare test-workload-all test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-seed test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative test-scalar-regression test-vector-regression test-full-regression clean
+.PHONY: help check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline check-scalar-throughput-experiment test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path test-scalar-pipe-vec-stub-all test-vector-regfile test-vector-vadd-directed test-vector-vadd-alias test-vector-vadd-backpressure test-vector-vadd-reset test-vector-vadd-random test-vector-vadd-invalid test-vector-vadd-all test-vector-vdot-directed test-vector-vdot-backpressure test-vector-vdot-reset test-vector-vdot-redirect test-vector-vdot-random test-vector-vdot-invalid test-vector-vdot-all test-vector-scratchpad test-vector-vmem-directed test-vector-vmem-backpressure test-vector-vmem-reset test-vector-vmem-redirect test-vector-vmem-errors test-vector-vmem-random test-vector-vmem-all test-vector-vsdot-patterns test-vector-vsdot-directed test-vector-vsdot-backpressure test-vector-vsdot-reset test-vector-vsdot-redirect test-vector-vsdot-invalid test-vector-vsdot-random test-vector-vsdot-all test-workload-encoder test-workload-golden test-workload-scalar test-workload-dense test-workload-sparse test-workload-compare test-workload-all generate-sensor-workload test-sensor-export test-sensor-rtl-dense test-sensor-rtl-sparse test-sensor-workload test-sensor-all test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-seed test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative test-scalar-regression test-vector-regression test-full-regression clean
 
 help:
 	@printf '%s\n' \
@@ -189,6 +189,19 @@ test-workload-sparse:
 test-workload-compare: test-workload-scalar test-workload-dense test-workload-sparse
 test-workload-all: test-workload-encoder test-workload-golden test-workload-compare
 
+SENSOR_WORKLOAD_TB := tb/integration/tb_sensor_workload.sv
+generate-sensor-workload:
+	@mkdir -p $(SIM_BUILD)
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) scripts/sensor_workload.py --emit $(SIM_BUILD)
+test-sensor-export: generate-sensor-workload
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest tb.tests.test_sensor_workload
+test-sensor-rtl-dense: generate-sensor-workload
+	@for sample in $$(seq 0 15); do iverilog -g2012 -I$(SIM_BUILD) -s tb_sensor_workload -Ptb_sensor_workload.MODE=1 -Ptb_sensor_workload.SAMPLE=$$sample -o $(SIM_BUILD)/test-sensor-dense_$$sample.vvp $(VEC_VADD_RTL) $(SENSOR_WORKLOAD_TB) && $(SIM_BUILD)/test-sensor-dense_$$sample.vvp || exit $$?; done
+test-sensor-rtl-sparse: generate-sensor-workload
+	@for sample in $$(seq 0 15); do iverilog -g2012 -I$(SIM_BUILD) -s tb_sensor_workload -Ptb_sensor_workload.MODE=2 -Ptb_sensor_workload.SAMPLE=$$sample -o $(SIM_BUILD)/test-sensor-sparse_$$sample.vvp $(VEC_VADD_RTL) $(SENSOR_WORKLOAD_TB) && $(SIM_BUILD)/test-sensor-sparse_$$sample.vvp || exit $$?; done
+test-sensor-workload: test-sensor-export test-sensor-rtl-dense test-sensor-rtl-sparse
+test-sensor-all: test-sensor-workload
+
 VEC_VMEM_TB := tb/integration/tb_vector_vmem.sv
 test-vector-vmem-directed:
 	@mkdir -p $(SIM_BUILD)
@@ -281,7 +294,7 @@ test-scalar-diff-redirect-backpressure:
 # Final scalar correctness suite. Excludes the known expected-fail throughput experiment.
 test-scalar-regression: test-repo test-scalar-directed test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative
 
-test-vector-regression: test-scalar-pipe-vec-stub-all test-vector-vadd-all test-vector-vdot-all test-vector-vmem-all test-vector-vsdot-all test-workload-all
+test-vector-regression: test-scalar-pipe-vec-stub-all test-vector-vadd-all test-vector-vdot-all test-vector-vmem-all test-vector-vsdot-all test-workload-all test-sensor-workload
 
 # One final acceptance command after a milestone is stable.
 test-full-regression: test-scalar-regression test-vector-regression lint check docs-check
