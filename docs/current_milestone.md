@@ -1,42 +1,55 @@
-# Milestone: Bare-Metal Sparse Kernel and Scalar vs Dense vs Sparse Evaluation
+# Milestone: Hardware-Aware Model Exporter and Multi-Sample Sensor Inference
 
 ## Objective
 
-Demonstrate Sparrow-V as a working sparse-aware processor by running one complete quantized inference-style kernel in three implementations:
+Extend Sparrow-V from a single synthetic fully connected benchmark into a reproducible model-deployment flow for a small edge-sensor classification workload.
 
-1. scalar RV32I;
-2. dense vector using `VDOT8`;
-3. 2:4 sparse vector using `VSDOT8`.
+The milestone must implement a bounded hardware-aware exporter that:
 
-All three implementations must produce identical signed 32-bit outputs for the same deterministic workload.
+1. accepts a deterministic quantized fully connected model and sensor-feature samples;
+2. validates signed INT8 and 2:4 sparsity requirements;
+3. emits dense and compressed sparse Sparrow-V data images;
+4. emits or reuses a Sparrow-V bare-metal program image;
+5. runs multiple samples through dense and sparse RTL execution;
+6. compares RTL outputs against an independent Python reference;
+7. reports correctness, predicted class, cycles, retired instructions, vector operations, multiplication accounting, and storage.
 
-The milestone must measure:
-
-- total cycles;
-- retired instructions;
-- dense and sparse dot-product instruction counts;
-- multiplications executed;
-- multiplications skipped;
-- weight-storage bytes;
-- vector scratchpad activity where observable.
-
-This milestone should use the existing hardware rather than add major new RTL features.
+This is a Sparrow-V deployment milestone, not the full SparrowML project.
 
 ## Baseline
 
 The repository currently contains:
 
 - `rtl/core/rv32_core.sv` as the unchanged scalar reference core;
-- `rtl/core/rv32_core_pipe.sv` as the experimental scalar/vector integration core;
-- one shared vector-register file;
-- `VADD8`;
-- dense signed `VDOT8`;
-- compressed 2:4 signed `VSDOT8`;
-- multiplication-executed and multiplication-skipped accounting;
+- `rtl/core/rv32_core_pipe.sv` as the experimental scalar/vector core;
+- a blocking, in-order scalar/vector command-completion interface;
+- one shared vector register file;
 - a 256-byte vector scratchpad;
-- aligned `VLOAD32` and `VSTORE32`;
-- precise completion, retirement, exceptions, reset cancellation, and wrong-path suppression;
-- deterministic scalar, vector, memory, and sparse regressions.
+- `VADD8`;
+- signed dense `VDOT8`;
+- signed compressed 2:4 `VSDOT8`;
+- `VLOAD32` and `VSTORE32`;
+- precise retirement, exception, reset, backpressure, and wrong-path behavior;
+- deterministic bare-metal scalar, dense-vector, and sparse-vector fully connected workloads;
+- a Python instruction and workload generator;
+- a Python golden model;
+- measured scalar, dense, and sparse execution metrics;
+- full scalar and vector regressions.
+
+The previous workload produced identical outputs:
+
+```text
+[382, -446, -246, 1054]
+```
+
+with:
+
+- scalar: 7399 cycles, 3948 retired instructions;
+- dense: 484 cycles, 109 retired instructions;
+- sparse: 484 cycles, 109 retired instructions;
+- sparse: 32 multiplications executed and 32 skipped;
+- dense weights: 64 bytes;
+- sparse compressed weights plus metadata: 38 bytes.
 
 ## Relevant Context
 
@@ -45,458 +58,603 @@ Read:
 - `AGENTS.md`
 - `docs/codex_context.md`
 - `docs/current_milestone.md`
-- `docs/architecture/scalar_vector_interface.md`
-- `docs/architecture/vector_vadd8.md`
+- `docs/architecture/sparse_fc_workload.md`
+- `docs/architecture/vector_vsdot8.md`
 - `docs/architecture/vector_memory.md`
-- the sparse-execution architecture document;
-- `rtl/core/rv32_core_pipe.sv`
-- `rtl/vector/rv32_vec_vadd_engine.sv`
-- the existing integration testbenches;
-- relevant Makefile and simulation scripts.
+- `docs/architecture/scalar_vector_interface.md`
+- `scripts/workload_fc.py`
+- `tb/integration/tb_workload_fc.sv`
+- relevant Makefile targets
+- current implementation-status and verification-plan documents.
 
-Read additional files only when a concrete implementation need requires them.
+Read additional files only when required by a concrete implementation or verification issue.
 
-## Workload
+## Scope Summary
 
-Implement one deterministic quantized fully connected layer:
-
-```text
-y[j] = bias[j] + Σ x[k] × w[j][k]
-```
-
-Use this initial bounded configuration:
-
-- 16 signed INT8 input features;
-- 4 output neurons;
-- 4 groups of 4 weights per output;
-- signed INT32 accumulation;
-- deterministic fixed input vector;
-- deterministic fixed dense weights;
-- deterministic 2:4-pruned sparse weights;
-- deterministic biases.
-
-The dense and sparse forms must represent equivalent mathematical weights.
-
-For every 4-weight group in the sparse form:
-
-- exactly two weights are nonzero;
-- two compressed INT8 weights are stored;
-- one 3-bit metadata value selects their activation lanes;
-- sparse execution uses `VSDOT8`.
-
-Do not increase the workload size unless the initial configuration is clearly too small to produce meaningful measurements.
-
-## Three Implementations
-
-### 1. Scalar RV32I kernel
-
-Implement the layer using supported scalar instructions only.
-
-Requirements:
-
-- signed INT8 values must be represented and sign-extended correctly;
-- multiplication may use an existing supported scalar multiply path if available;
-- if scalar multiply is not implemented, use a bounded software multiply routine;
-- accumulation must be signed INT32;
-- outputs must be stored in a known result region;
-- no custom vector instructions may be used.
-
-Document exactly how scalar multiplication is implemented.
-
-### 2. Dense vector kernel
-
-Implement the same layer using:
-
-- `VLOAD32` for activation and dense-weight groups;
-- `VDOT8` for four-lane signed dot products;
-- scalar accumulation of partial dot products and bias;
-- existing scalar instructions for loop/control and result storage.
-
-Requirements:
-
-- four dense dot-product groups per output neuron;
-- no `VSDOT8`;
-- outputs identical to the scalar kernel.
-
-### 3. Sparse vector kernel
-
-Implement the same layer using:
-
-- `VLOAD32` for activation groups;
-- `VLOAD32` for compressed two-weight groups;
-- `VSDOT8` with 2:4 metadata;
-- scalar accumulation of partial sparse dot products and bias;
-- existing scalar instructions for loop/control and result storage.
-
-Requirements:
-
-- four sparse dot-product groups per output neuron;
-- exactly two multiplications executed and two skipped per sparse group;
-- outputs identical to the scalar and dense kernels.
-
-## Program Representation
-
-Provide a minimal bare-metal program-generation path.
-
-Preferred implementation:
-
-- a small Python instruction encoder or assembler helper;
-- deterministic generation of instruction-memory and data-memory images;
-- helpers for standard RV32I instructions used by the workload;
-- helpers for `VLOAD32`, `VSTORE32`, `VDOT8`, and `VSDOT8`;
-- no dependency on a full custom compiler backend.
-
-The generator must:
-
-- produce reproducible program images;
-- validate immediate and register-field ranges;
-- fail clearly on unsupported instructions;
-- document the custom-instruction encodings it emits.
-
-Do not hardcode raw instruction words throughout the testbench when a small reusable encoder would be clearer.
-
-## Data Layout
-
-Define and document a deterministic layout for:
-
-- input activations;
-- dense weights;
-- compressed sparse weights;
-- sparse metadata;
-- biases;
-- scalar outputs;
-- dense-vector outputs;
-- sparse-vector outputs.
-
-The vector scratchpad is only 256 bytes, so confirm the proposed layout fits.
-
-If all three datasets cannot coexist in the scratchpad simultaneously, use separate deterministic runs or reload phases rather than enlarging the memory without review.
-
-Document:
-
-- byte offsets;
-- word organization;
-- lane ordering;
-- compressed-weight ordering;
-- metadata association;
-- output locations.
-
-## Golden Model
-
-Add an independent Python golden model.
-
-It must compute:
-
-- scalar dense outputs;
-- equivalent dense-vector outputs;
-- sparse compressed outputs;
-- expected multiplication counts;
-- expected skipped counts;
-- dense and sparse weight-storage sizes.
-
-The model must verify:
+Implement a reusable deployment path for a small vibration-fault or sensor-anomaly classifier represented as:
 
 ```text
-scalar_output == dense_vector_output == sparse_vector_output
+signed INT8 input features
+→ one fully connected output layer
+→ signed INT32 logits
+→ argmax predicted class
 ```
-
-for all four output neurons.
-
-Do not derive expected sparse results from RTL helper code.
-
-## End-to-End Simulation Harness
-
-Add an integration-level test that:
-
-1. loads the generated program image;
-2. initializes required scalar memory and vector scratchpad state;
-3. runs until completion, trap, or timeout;
-4. captures output values;
-5. compares outputs against the Python-generated expected values;
-6. records performance and activity metrics;
-7. fails on any mismatch or unexpected trap.
-
-Use the actual scalar/vector pipeline path.
-
-Do not bypass instruction execution by directly calling vector modules.
-
-## Completion Signalling
-
-Use one deterministic program-completion mechanism.
-
-Preferred options:
-
-- write a known signature to a monitored scalar-memory address;
-- execute an existing terminal instruction convention;
-- use another already established integration-test completion mechanism.
-
-The harness must distinguish:
-
-- successful completion;
-- timeout;
-- unexpected trap;
-- output mismatch.
-
-## Performance Counters
-
-Provide measured or testbench-observed counters for each kernel.
-
-At minimum record:
-
-- total cycles from program start to completion;
-- retired instruction count;
-- scalar multiply operations or software-multiply invocations;
-- `VDOT8` instructions retired;
-- `VSDOT8` instructions retired;
-- multiplications executed;
-- multiplications skipped;
-- vector loads;
-- vector stores;
-- scratchpad writes where observable.
-
-Counters may be implemented in the testbench if they are derived from real retirement and debug events.
-
-Do not add architectural CSRs solely for this milestone unless the existing design already has a suitable counter interface.
-
-## Weight-Storage Accounting
-
-Report exact weight-storage bytes.
-
-For the workload:
-
-### Dense form
-
-Count:
-
-- all 16 INT8 weights per output;
-- total across 4 outputs.
-
-### Sparse form
-
-Count:
-
-- two compressed INT8 weights per 4-weight group;
-- metadata storage;
-- total across 4 outputs.
-
-Be explicit about metadata packing assumptions.
-
-Report both:
-
-- raw weight bytes;
-- weight plus metadata bytes.
-
-Do not claim a 50% total-storage reduction if metadata overhead makes the measured reduction smaller.
-
-## Required Measurements
-
-Produce one comparison table:
-
-| Metric | Scalar RV32I | Dense Vector | Sparse Vector |
-|---|---:|---:|---:|
-| Correct outputs | | | |
-| Total cycles | | | |
-| Retired instructions | | | |
-| Scalar multiply operations | | | |
-| Dense dot-product instructions | | | |
-| Sparse dot-product instructions | | | |
-| Multiplications executed | | | |
-| Multiplications skipped | | | |
-| Vector loads | | | |
-| Vector stores | | | |
-| Weight bytes | | | |
-| Metadata bytes | | | |
-| Weight + metadata bytes | | | |
-
-Every value must be measured or deterministically derived and clearly labelled.
-
-## Correctness Requirements
-
-All three kernels must:
-
-- produce exactly four signed INT32 outputs;
-- match the independent Python golden model;
-- use identical input values and equivalent mathematical weights;
-- include bias exactly once;
-- use correct signed INT8 interpretation;
-- avoid overflow beyond signed INT32 for the chosen dataset;
-- complete without unexpected trap;
-- terminate within a bounded timeout.
-
-The sparse kernel must additionally prove:
-
-- every group obeys 2:4 structure;
-- metadata matches the compressed-weight order;
-- sparse output equals the equivalent dense output;
-- executed multiplication count equals 2 per sparse group;
-- skipped multiplication count equals 2 per sparse group.
-
-## Directed Workload Cases
-
-The primary workload must include a mixture of:
-
-- positive activations;
-- negative activations;
-- zero activations;
-- positive weights;
-- negative weights;
-- zero weights;
-- at least one `-128` value where mathematically safe;
-- at least one `127` value;
-- cancellation across groups;
-- nonzero biases;
-- positive and negative final outputs where practical.
-
-Keep all expected outputs within signed 32-bit range.
-
-## Determinism
-
-All generated images, inputs, weights, metadata, expected outputs, and measurements must be reproducible.
 
 Use:
 
-- a fixed seed if data is generated;
-- checked-in deterministic configuration;
-- stable program ordering;
-- stable timeout;
-- stable measurement definitions.
+- 16 signed INT8 input features;
+- 4 output classes;
+- 64 dense signed INT8 weights;
+- 4 signed INT32 biases;
+- equivalent dense and 2:4 sparse model forms;
+- at least 16 deterministic evaluation samples;
+- one expected class label per sample.
 
-Report the seed if one is used.
+The model may be a compact checked-in deployment fixture rather than a newly trained state-of-the-art model.
 
-## Assertions and Sanity Checks
+It must be clearly labelled as a deterministic sensor-classification fixture unless its provenance from a real public dataset is already available and documented.
 
-Add checks for:
+Do not fabricate claims about model quality or dataset accuracy.
 
-- program image bounds;
-- scratchpad layout bounds;
-- valid sparse metadata;
-- exactly two nonzero weights per sparse group;
-- dense/sparse mathematical equivalence before simulation;
-- no unexpected vector-register or scratchpad writes;
-- no sparse compute accounting for dense execution;
-- expected sparse accounting for sparse execution;
-- no unexpected exception;
-- exactly one completion signature;
-- no output write before the relevant computation completes.
+## Input Model Format
 
-## Existing Feature Preservation
+Define one stable machine-readable model format.
 
-Preserve all current regressions for:
+Preferred format:
 
-- scalar directed and differential verification;
-- scalar/vector adapter;
-- `VADD8`;
-- dense `VDOT8`;
-- `VLOAD32` and `VSTORE32`;
-- vector scratchpad;
-- `VSDOT8`;
-- reset, backpressure, redirect, and exception behavior.
+```text
+JSON
+```
 
-Do not weaken or replace the existing focused tests.
+The model description must include:
+
+- model name;
+- version;
+- input feature count;
+- output class count;
+- class names;
+- signed INT8 dense weight matrix;
+- signed INT32 bias vector;
+- optional feature scaling metadata;
+- optional provenance note;
+- explicit data-layout version.
+
+Example conceptual structure:
+
+```json
+{
+  "model_name": "sparrow_vibration_fixture",
+  "format_version": 1,
+  "input_features": 16,
+  "output_classes": 4,
+  "class_names": ["normal", "inner", "outer", "ball"],
+  "weights_int8": [
+    [0, 0, 0, 0],
+    [0, 0, 0, 0]
+  ],
+  "bias_int32": [0, 0, 0, 0]
+}
+```
+
+The actual weight layout must be documented unambiguously.
+
+The exporter must reject:
+
+- wrong matrix dimensions;
+- missing fields;
+- values outside signed INT8 or signed INT32 range;
+- inconsistent class counts;
+- malformed metadata;
+- unsupported format versions.
+
+## Sensor Sample Format
+
+Define one stable sample format.
+
+Preferred format:
+
+```text
+CSV or JSON
+```
+
+Each sample must include:
+
+- sample ID;
+- 16 signed INT8 input features;
+- expected class label;
+- optional source or fixture note.
+
+At least 16 deterministic samples must be checked in.
+
+The sample set must include:
+
+- positive values;
+- negative values;
+- zeros;
+- at least one `-128` where mathematically safe;
+- at least one `127`;
+- samples from all four classes where practical.
+
+The exporter must reject:
+
+- incorrect feature count;
+- values outside signed INT8;
+- unknown labels;
+- duplicate sample IDs where uniqueness is required.
+
+## Dense Model Export
+
+Export the dense model into the existing Sparrow-V workload representation.
+
+Requirements:
+
+- preserve the exact mathematical dense weight matrix;
+- use four groups of four weights per output class;
+- preserve little-endian INT8 lane ordering;
+- emit deterministic scratchpad or data-memory images;
+- emit deterministic expected-logit files;
+- emit any required manifest describing addresses and sizes.
+
+Dense storage must report:
+
+```text
+64 weight bytes
+```
+
+Bias storage must be reported separately.
+
+## 2:4 Sparse Conversion
+
+Implement deterministic 2:4 structured pruning or projection.
+
+For every consecutive four-weight group:
+
+- retain exactly two weights;
+- set exactly two weights to zero;
+- retain the two weights with largest absolute magnitude;
+- use a deterministic tie-breaking rule based on lower lane index;
+- encode one of the six legal Sparrow-V metadata patterns;
+- order compressed weights according to the existing VSDOT8 contract;
+- reconstruct the sparse dense-equivalent matrix for validation.
+
+Document the tie-breaking rule.
+
+The exporter must verify for every sparse group:
+
+- exactly two retained values;
+- exactly two zeroed values;
+- legal metadata;
+- lower selected lane maps to compressed weight 0;
+- higher selected lane maps to compressed weight 1;
+- decompression reproduces the sparse dense-equivalent group exactly.
+
+Do not use invalid metadata encodings.
+
+## Sparse Storage Packing
+
+Export:
+
+- compressed INT8 weights;
+- 3-bit metadata;
+- a documented metadata packing format;
+- deterministic memory images;
+- a manifest describing byte offsets and group association.
+
+Report:
+
+- compressed weight bytes;
+- metadata bits;
+- packed metadata bytes;
+- padding bits;
+- total sparse model bytes;
+- percentage reduction relative to dense weights.
+
+Do not claim a full 50% storage reduction when metadata and padding are included.
+
+## Python Reference Inference
+
+Add or extend an independent Python reference model.
+
+For each sample compute:
+
+1. dense INT32 logits;
+2. sparse dense-equivalent INT32 logits;
+3. compressed sparse INT32 logits;
+4. dense predicted class;
+5. sparse predicted class.
+
+Require:
+
+```text
+sparse dense-equivalent logits == compressed sparse logits
+```
+
+Dense and sparse logits are allowed to differ because pruning changes the mathematical model.
+
+The exporter must report:
+
+- dense logits;
+- sparse logits;
+- dense predicted class;
+- sparse predicted class;
+- expected label;
+- whether each prediction is correct.
+
+Do not require dense and sparse logits to be identical after pruning.
+
+## Accuracy Reporting
+
+For the checked-in sample set, report:
+
+- dense correct predictions;
+- dense accuracy;
+- sparse correct predictions;
+- sparse accuracy;
+- number of dense/sparse prediction disagreements;
+- per-class sample counts;
+- per-class correct counts where practical.
+
+Clearly label this as:
+
+- fixture accuracy;
+- deployment-set accuracy;
+- or dataset-subset accuracy,
+
+depending on the actual provenance.
+
+Do not present it as general model accuracy unless evaluated on a documented dataset split.
+
+## Sparrow-V Program Generation
+
+Reuse the existing bare-metal workload infrastructure where practical.
+
+The exporter or generator must create deterministic artifacts for:
+
+- dense execution;
+- sparse execution;
+- each selected sensor sample or a bounded batch sequence.
+
+Preferred approach:
+
+- reuse one parameterized program structure;
+- regenerate data images per sample;
+- avoid producing a large unrelated program for every sample when one reusable program is sufficient.
+
+The generated program must:
+
+- load 16 activation features;
+- compute four output logits;
+- add each bias once;
+- write four signed INT32 outputs;
+- write one completion signature;
+- optionally write the predicted class if cleanly supported.
+
+Do not add new ISA instructions unless a genuine existing capability gap blocks the milestone.
+
+## RTL End-to-End Execution
+
+Run dense and sparse inference through:
+
+```text
+rtl/core/rv32_core_pipe.sv
+```
+
+Requirements:
+
+- actual instruction fetch and execution;
+- actual VLOAD32 operations;
+- actual VDOT8 or VSDOT8 operations;
+- actual scalar accumulation and result storage;
+- deterministic completion detection;
+- bounded timeout;
+- no direct calls into the vector engine from the workload testbench.
+
+For every sample verify:
+
+- four RTL logits;
+- exact agreement with the corresponding Python reference;
+- predicted class agreement with Python;
+- no unexpected trap;
+- exactly one completion signature.
+
+## Multi-Sample Execution Strategy
+
+Use one of these bounded strategies:
+
+### Preferred
+
+Run each sample as an independent deterministic simulation invocation.
+
+### Acceptable
+
+Run multiple samples sequentially in one simulation only if:
+
+- state is reset or explicitly reinitialized;
+- counters are separated per sample;
+- output attribution remains unambiguous.
+
+Do not introduce complex batching infrastructure.
+
+## Required Metrics
+
+For dense and sparse RTL execution, report per sample:
+
+- cycles;
+- retired instructions;
+- VLOAD32 retirements;
+- VDOT8 retirements;
+- VSDOT8 retirements;
+- sparse executed multiplications;
+- sparse skipped multiplications;
+- completion status;
+- predicted class.
+
+Also report aggregate values:
+
+- minimum cycles;
+- maximum cycles;
+- mean cycles;
+- total retired instructions;
+- total dense dot products;
+- total sparse dot products;
+- total sparse executed multiplications;
+- total sparse skipped multiplications.
+
+If deterministic program paths make cycle counts identical across samples, report that explicitly.
+
+## Expected Operation Counts
+
+For a 16-input, 4-output single fully connected layer:
+
+```text
+4 groups per output × 4 outputs = 16 dot-product instructions
+```
+
+Dense execution must report per sample:
+
+- 16 VDOT8 operations;
+- 64 conceptual signed INT8 multiplications;
+- 0 VSDOT8 operations.
+
+Sparse execution must report per sample:
+
+- 16 VSDOT8 operations;
+- 32 executed signed INT8 multiplications;
+- 32 skipped multiplications;
+- 0 VDOT8 operations.
+
+Any deviation must fail the test unless the program structure is intentionally changed and documented.
+
+## Correctness Requirements
+
+For every checked-in sample:
+
+- Python dense logits are deterministic;
+- Python sparse logits are deterministic;
+- RTL dense logits equal Python dense logits;
+- RTL sparse logits equal Python sparse logits;
+- RTL dense prediction equals Python dense prediction;
+- RTL sparse prediction equals Python sparse prediction;
+- no unexpected trap occurs;
+- outputs remain within signed INT32;
+- completion occurs before timeout.
+
+## Export Manifest
+
+Generate one deterministic manifest containing:
+
+- model name and version;
+- sample-set name and version;
+- feature count;
+- class count;
+- dense weight bytes;
+- compressed sparse weight bytes;
+- metadata bytes;
+- bias bytes;
+- memory image paths;
+- scratchpad offsets;
+- output addresses;
+- program image paths;
+- expected operation counts;
+- optional content hashes.
+
+Preferred format:
+
+```text
+JSON
+```
+
+Paths must be repository-relative where practical.
+
+Do not include machine-specific absolute paths.
+
+## Reproducibility
+
+The full export must be reproducible from checked-in source inputs.
+
+One command must regenerate all generated workload artifacts.
+
+Example target:
+
+```text
+make generate-sensor-workload
+```
+
+After regeneration:
+
+- `git diff --exit-code` should remain clean for checked-in generated artifacts;
+- or generated artifacts must be ignored and compared through deterministic tests.
+
+Choose one policy and document it.
+
+## Validation of Existing Benchmark
+
+Preserve the previous synthetic FC benchmark and its verified metrics.
+
+Do not replace or silently alter:
+
+- the `[382, -446, -246, 1054]` reference workload;
+- scalar, dense, or sparse benchmark definitions;
+- existing cycle-count scope;
+- existing regressions.
+
+The sensor deployment flow must be additive.
 
 ## Out of Scope
 
 Do not implement:
 
-- a C compiler backend;
-- GCC or LLVM changes;
-- a full assembler;
-- an operating system;
-- interrupts;
-- caches;
-- external DRAM;
-- DMA;
-- convolution;
-- multiple neural-network layers;
-- activation functions beyond what is already trivial in scalar code;
-- floating point;
-- training;
-- automatic pruning;
+- full SparrowML;
+- model training framework;
+- neural-network architecture search;
 - quantization-aware training;
+- knowledge distillation;
+- ONNX import;
+- compiler IR;
+- LLVM or GCC backend;
+- full C runtime;
+- convolution;
+- recurrent networks;
+- multi-layer inference unless trivially supported without new RTL;
+- activation functions requiring new ISA support;
+- automatic dataset download;
+- internet-dependent tests;
+- floating point;
+- dynamic tensor shapes;
 - configurable vector length;
-- vectors wider than 32 bits;
-- additional ISA operations unless strictly necessary and approved;
-- FPGA or ASIC optimization;
-- power estimates without a measured flow;
+- wider vector registers;
+- new architectural CSRs;
+- DMA, caches, or external memory;
+- FPGA or ASIC flow;
 - changes to `rtl/core/rv32_core.sv`.
 
-## Focused Development Tests
+## Focused Tests
 
 Add focused tests for:
 
-### Program encoder
+### Model parser
 
-- known scalar instruction encodings;
-- `VLOAD32`;
-- `VSTORE32`;
-- `VDOT8`;
-- `VSDOT8`;
-- positive and negative immediates;
-- rejection of invalid register, immediate, and metadata values.
+- valid model;
+- invalid dimensions;
+- signed INT8 overflow;
+- signed INT32 bias overflow;
+- unsupported format version;
+- class-name mismatch.
 
-### Golden model
+### Sample parser
 
-- scalar/dense/sparse equality;
-- sparse metadata reconstruction;
-- storage-byte calculations;
-- multiplication-count calculations.
+- valid samples;
+- wrong feature count;
+- out-of-range values;
+- unknown labels;
+- duplicate IDs if disallowed.
 
-### End-to-end scalar kernel
+### 2:4 conversion
 
-- program completion;
-- four correct outputs;
-- no custom vector instruction retirement;
-- stable cycle and retirement counts.
+- all six metadata patterns;
+- deterministic tie-breaking;
+- positive and negative weights;
+- zero-valued weights;
+- `-128`;
+- `127`;
+- exact decompression;
+- exactly two retained values per group.
 
-### End-to-end dense-vector kernel
+### Storage accounting
 
-- program completion;
-- four correct outputs;
-- expected `VDOT8` count;
-- zero `VSDOT8` count;
-- correct multiplication count.
+- dense bytes;
+- compressed bytes;
+- metadata bits;
+- packed metadata bytes;
+- padding;
+- total sparse bytes;
+- percentage reduction.
 
-### End-to-end sparse-vector kernel
+### Python inference
 
-- program completion;
-- four correct outputs;
-- expected `VSDOT8` count;
-- exact executed/skipped multiplication counts;
-- compressed storage accounting.
+- dense logits;
+- sparse logits;
+- compressed/decompressed sparse equality;
+- argmax;
+- label comparison;
+- deterministic accuracy summary.
 
-### Cross-kernel comparison
+### Artifact generation
 
-- identical outputs;
-- all required metrics present;
-- no unlabelled or fabricated measurements.
+- deterministic program images;
+- deterministic data images;
+- deterministic manifest;
+- valid memory bounds;
+- no machine-specific paths.
+
+### RTL dense inference
+
+For all selected samples:
+
+- exact logits;
+- correct predicted class;
+- 16 VDOT8;
+- 0 VSDOT8;
+- expected VLOAD32 count;
+- no sparse executed/skipped events;
+- one completion signature.
+
+### RTL sparse inference
+
+For all selected samples:
+
+- exact logits;
+- correct predicted class;
+- 0 VDOT8;
+- 16 VSDOT8;
+- 32 executed multiplications;
+- 32 skipped multiplications;
+- expected VLOAD32 count;
+- one completion signature.
+
+### Aggregate comparison
+
+Report:
+
+- dense and sparse accuracy;
+- disagreement count;
+- dense and sparse cycle summaries;
+- storage comparison;
+- operation comparison.
 
 ## Canonical Targets
 
 Add targets following repository conventions, including equivalents of:
 
 ```text
-test-workload-encoder
-test-workload-golden
-test-workload-scalar
-test-workload-dense
-test-workload-sparse
-test-workload-compare
-test-workload-all
+generate-sensor-workload
+test-sensor-model-parser
+test-sensor-sparsify
+test-sensor-golden
+test-sensor-export
+test-sensor-dense
+test-sensor-sparse
+test-sensor-compare
+test-sensor-all
 ```
 
-Update `test-vector-regression` only if the new workload test is sufficiently bounded.
+Exact names may be adjusted to match the repository.
 
-A larger workload comparison may instead be included only in `test-full-regression` or a dedicated workload regression target.
+Do not force the full multi-sample workload into every focused RTL test.
 
-Avoid making every focused RTL edit rerun the full end-to-end workload.
+Include it in:
+
+- a dedicated sensor-workload aggregate target;
+- and the final full regression if runtime remains reasonable.
 
 ## Final Acceptance Regression
 
-During development, run only the relevant encoder, golden-model, and kernel tests.
+During development, run focused parser, exporter, golden-model, and sample-level tests.
 
 After implementation is stable, run once:
 
 ```text
+make test-sensor-all
 make test-workload-all
 make test-vector-regression
 make test-full-regression
@@ -510,86 +668,107 @@ git diff --check
 
 The milestone is complete only when:
 
-1. A deterministic fully connected workload exists.
-2. It has 16 signed INT8 inputs and 4 outputs.
-3. It includes equivalent dense and 2:4 sparse weights.
-4. A Python golden model computes all expected outputs.
-5. Scalar RV32I execution produces the expected outputs.
-6. Dense-vector execution produces the expected outputs.
-7. Sparse-vector execution produces the expected outputs.
-8. All three output vectors are identical.
-9. Bias is included correctly.
-10. A reusable program encoder exists.
-11. Custom vector instruction encodings are generated programmatically.
-12. Program and data layouts are documented.
-13. The layout fits existing memories or uses clearly separated runs.
-14. End-to-end execution uses the actual pipeline.
-15. Completion and timeout behavior are deterministic.
-16. Total cycles are measured for each kernel.
-17. Retired instructions are measured for each kernel.
-18. Dense `VDOT8` retirements are counted.
-19. Sparse `VSDOT8` retirements are counted.
-20. Sparse executed multiplications are counted.
-21. Sparse skipped multiplications are counted.
-22. Dense conceptual or measured multiplications are reported.
-23. Scalar multiply work is reported honestly.
-24. Dense weight-storage bytes are reported.
-25. Sparse compressed-weight bytes are reported.
-26. Metadata bytes are reported.
-27. Combined sparse storage is reported.
-28. Every sparse group has exactly two nonzero weights.
-29. Sparse metadata reconstructs the equivalent dense weights.
-30. No unexpected trap occurs.
-31. No output mismatch occurs.
-32. Existing scalar/vector regressions remain passing.
-33. Documentation includes the final comparison table.
-34. Claims distinguish measured values from derived values.
-35. No compiler backend, OS, cache, DMA, wider vector, or unrelated ISA work is added.
-36. `rtl/core/rv32_core.sv` remains unchanged.
-37. Codex creates no commit or push.
-38. `.codex/milestone_result.md` is finalized in compact format.
+1. A stable model input format exists.
+2. A stable sensor-sample format exists.
+3. The model uses 16 signed INT8 input features.
+4. The model produces 4 signed INT32 logits.
+5. At least 16 deterministic samples exist.
+6. Every model and sample input is range-validated.
+7. Dense weights export deterministically.
+8. Deterministic 2:4 pruning or projection exists.
+9. Tie-breaking is documented.
+10. Every sparse group retains exactly two weights.
+11. Every sparse group uses legal metadata.
+12. Compressed-weight ordering matches VSDOT8.
+13. Sparse decompression is exact.
+14. Dense storage bytes are reported.
+15. Compressed weight bytes are reported.
+16. Metadata bits and packed bytes are reported.
+17. Total sparse storage is reported honestly.
+18. Python dense inference works.
+19. Python sparse inference works.
+20. Compressed sparse inference equals decompressed sparse inference.
+21. Dense predicted classes are reported.
+22. Sparse predicted classes are reported.
+23. Expected labels are reported.
+24. Dense and sparse accuracy are reported with correct scope.
+25. A deterministic export manifest exists.
+26. Dense program/data artifacts are generated.
+27. Sparse program/data artifacts are generated.
+28. Artifacts use repository-relative paths.
+29. Generation is reproducible.
+30. Dense RTL execution runs through the real pipeline.
+31. Sparse RTL execution runs through the real pipeline.
+32. Dense RTL logits equal Python dense logits for every sample.
+33. Sparse RTL logits equal Python sparse logits for every sample.
+34. Dense predicted classes match Python for every sample.
+35. Sparse predicted classes match Python for every sample.
+36. No unexpected trap occurs.
+37. Every sample completes before timeout.
+38. Dense execution reports 16 VDOT8 operations per sample.
+39. Sparse execution reports 16 VSDOT8 operations per sample.
+40. Sparse execution reports 32 executed multiplications per sample.
+41. Sparse execution reports 32 skipped multiplications per sample.
+42. Dense execution reports no sparse accounting events.
+43. Per-sample cycles and retired instructions are reported.
+44. Aggregate cycle statistics are reported.
+45. Dense/sparse prediction disagreements are reported.
+46. Previous synthetic workload remains passing.
+47. Existing scalar and vector regressions remain passing.
+48. Documentation distinguishes fixture results from real dataset claims.
+49. No internet-dependent test is added.
+50. No new ISA, cache, DMA, compiler backend, or broad RTL redesign is added.
+51. `rtl/core/rv32_core.sv` remains unchanged.
+52. Codex creates no commit or push.
+53. `.codex/milestone_result.md` is finalized.
 
 ## Stop Conditions
 
 Stop for human review only if:
 
-- the scalar ISA cannot execute the workload without a major new instruction;
-- the program cannot access required scalar or vector data without broad memory redesign;
-- the 256-byte scratchpad cannot support even separated deterministic runs;
-- end-to-end completion cannot be detected using existing integration mechanisms;
-- cycle or retirement measurement requires invasive architectural redesign;
-- dense and sparse kernels cannot be represented with the existing instruction encodings;
-- a likely existing CPU/vector correctness bug is discovered;
-- the milestone would require a compiler backend or external memory system.
+- the existing FC program cannot accept regenerated model data without major RTL changes;
+- the 256-byte scratchpad cannot support one sample using separated deterministic runs;
+- accurate multi-sample execution requires new ISA operations;
+- model dimensions cannot fit existing memory or instruction encoding;
+- dense or sparse logits cannot be reproduced by the existing arithmetic semantics;
+- adding the exporter requires a compiler framework rather than a bounded script;
+- a likely existing CPU, vector, or workload correctness bug is discovered;
+- the only available route requires internet-dependent tests.
 
-Ordinary encoder bugs, testbench bugs, data-layout changes, program-generation issues, and documentation work are not stop conditions.
+Ordinary parser bugs, packing bugs, memory-layout changes, testbench issues, and documentation work are not stop conditions.
 
 ## Required Documentation
 
 Update only materially affected files, normally:
 
-- a new workload and evaluation document;
+- a new sensor deployment architecture document;
 - `docs/implementation_status.md`;
 - `docs/verification_plan.md`;
 - `docs/milestone_history.md`;
-- README if stable commands or headline results are added.
+- README only if stable public commands are added.
 
 Document:
 
-- workload dimensions;
-- deterministic input, weights, sparsity, and biases;
-- program-generation method;
-- scalar multiply method;
-- scratchpad and memory layout;
-- dense and sparse kernel structure;
-- golden-model methodology;
-- completion detection;
-- measurement definitions;
-- final comparison table;
+- model and sample formats;
+- fixture or dataset provenance;
+- class names;
+- quantized tensor layout;
+- 2:4 pruning rule;
+- tie-breaking;
+- compressed-weight layout;
+- metadata packing;
+- memory map;
+- exporter command;
+- manifest format;
+- Python inference methodology;
+- RTL execution methodology;
+- per-sample and aggregate results;
+- dense and sparse accuracy scope;
 - storage accounting;
+- operation accounting;
 - limitations and non-claims.
 
-Do not claim general ML inference, compiler support, or energy efficiency.
+Do not describe the fixture as a trained production model unless that is genuinely true and documented.
 
 ## Result File
 
@@ -598,15 +777,20 @@ Update `.codex/milestone_result.md` throughout the run.
 Finalize it with:
 
 - `STATUS: COMPLETE`, `STATUS: BLOCKED`, or `STATUS: FAILED`;
-- workload dimensions;
-- generator and golden-model summary;
-- exact output values;
-- scalar, dense, and sparse metrics;
-- multiplication and storage accounting;
-- focused and final test commands;
+- model and sample-set names;
+- provenance description;
+- sample count;
+- class names;
+- dense and sparse accuracy;
+- disagreement count;
+- dense and sparse storage;
+- per-sample operation counts;
+- aggregate cycle and retirement metrics;
+- exact test commands;
 - changed files;
 - bugs fixed;
 - remaining limitations;
-- confirmation that existing sparse/vector tests remain passing;
+- confirmation that the previous FC benchmark still passes;
+- confirmation that existing scalar/vector regressions pass;
 - confirmation that `rtl/core/rv32_core.sv` is unchanged;
 - confirmation that no commit or push occurred.
