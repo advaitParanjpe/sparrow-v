@@ -1,0 +1,27 @@
+{
+  "clock_targets_ns": [10.0, 20.0],
+  "technology": "Yosys generic cmos2 gate mapping",
+  "configurations": {
+    "scalar": {
+      "top": "sparrowv_ppa_scalar_top",
+      "manifest": "synth/yosys/manifests/scalar.f",
+      "defines": [],
+      "memory_bits": 0,
+      "description": "Protected rv32_core reference scalar core; no vector RTL is read."
+    },
+    "dense": {
+      "top": "sparrowv_ppa_dense_top",
+      "manifest": "synth/yosys/manifests/dense.f",
+      "defines": ["ENABLE_SPARSE=0"],
+      "memory_bits": 3072,
+      "description": "Experimental pipe plus vector register file and 256-byte scratchpad, with sparse execution disabled."
+    },
+    "sparse": {
+      "top": "sparrowv_ppa_sparse_top",
+      "manifest": "synth/yosys/manifests/sparse.f",
+      "defines": ["ENABLE_SPARSE=1"],
+      "memory_bits": 3072,
+      "description": "Experimental pipe plus complete dense and 2:4 sparse vector execution."
+    }
+  }
+}

@@ -4,7 +4,7 @@ RTL_SOURCES := $(shell find rtl -name '*.sv' | sort)
 SCALAR_TB := tb/integration/tb_scalar_core.sv
 SIM_BUILD := sim/build
 
-.PHONY: help check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline check-scalar-throughput-experiment test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path test-scalar-pipe-vec-stub-all test-vector-regfile test-vector-vadd-directed test-vector-vadd-alias test-vector-vadd-backpressure test-vector-vadd-reset test-vector-vadd-random test-vector-vadd-invalid test-vector-vadd-all test-vector-vdot-directed test-vector-vdot-backpressure test-vector-vdot-reset test-vector-vdot-redirect test-vector-vdot-random test-vector-vdot-invalid test-vector-vdot-all test-vector-scratchpad test-vector-vmem-directed test-vector-vmem-backpressure test-vector-vmem-reset test-vector-vmem-redirect test-vector-vmem-errors test-vector-vmem-random test-vector-vmem-all test-vector-vsdot-patterns test-vector-vsdot-directed test-vector-vsdot-backpressure test-vector-vsdot-reset test-vector-vsdot-redirect test-vector-vsdot-invalid test-vector-vsdot-random test-vector-vsdot-all test-workload-encoder test-workload-golden test-workload-scalar test-workload-dense test-workload-sparse test-workload-compare test-workload-all generate-sensor-workload test-sensor-export test-sensor-rtl-dense test-sensor-rtl-sparse test-sensor-workload test-sensor-all test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-seed test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative test-scalar-regression test-vector-regression test-full-regression clean
+.PHONY: help check docs-check status test test-repo lint sim-scalar test-scalar test-scalar-directed test-scalar-random test-scalar-reference test-scalar-pipeline check-scalar-throughput-experiment test-scalar-pipe-dev test-scalar-pipe-alu test-scalar-pipe-forward test-scalar-pipe-control test-scalar-pipe-redirect test-scalar-pipe-memory test-scalar-pipe-trap test-scalar-pipe-store-retire test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path test-scalar-pipe-vec-stub-all test-vector-regfile test-vector-vadd-directed test-vector-vadd-alias test-vector-vadd-backpressure test-vector-vadd-reset test-vector-vadd-random test-vector-vadd-invalid test-vector-vadd-all test-vector-vdot-directed test-vector-vdot-backpressure test-vector-vdot-reset test-vector-vdot-redirect test-vector-vdot-random test-vector-vdot-invalid test-vector-vdot-all test-vector-scratchpad test-vector-vmem-directed test-vector-vmem-backpressure test-vector-vmem-reset test-vector-vmem-redirect test-vector-vmem-errors test-vector-vmem-random test-vector-vmem-all test-vector-vsdot-patterns test-vector-vsdot-directed test-vector-vsdot-backpressure test-vector-vsdot-reset test-vector-vsdot-redirect test-vector-vsdot-invalid test-vector-vsdot-random test-vector-vsdot-all test-workload-encoder test-workload-golden test-workload-scalar test-workload-dense test-workload-sparse test-workload-compare test-workload-all generate-sensor-workload test-sensor-export test-sensor-rtl-dense test-sensor-rtl-sparse test-sensor-workload test-sensor-all test-scalar-diff-smoke test-scalar-diff-random test-scalar-diff-stall test-scalar-diff-seed test-scalar-diff-negative test-scalar-diff-redirect-backpressure test-scalar-diff-subword-directed test-scalar-diff-subword-random test-scalar-diff-subword-stall test-scalar-diff-subword-seed test-scalar-diff-subword-negative test-scalar-diff-store-retire test-scalar-diff-store-retire-negative test-scalar-regression test-vector-regression test-full-regression synth-scalar synth-vector-dense synth-vector-sparse synth-compare ppa-report ppa-all test-config-scalar test-config-dense test-config-sparse clean
 
 help:
 	@printf '%s\n' \
@@ -90,7 +90,8 @@ test-scalar-pipe-vec-wrong-path:
 	$(SIM_BUILD)/tb_scalar_pipe_vec_wrong_path.vvp
 test-scalar-pipe-vec-stub-all: test-scalar-pipe-vec-stub test-scalar-pipe-vec-cmd-stall test-scalar-pipe-vec-cpl-stall test-scalar-pipe-vec-exception test-scalar-pipe-vec-no-writeback test-scalar-pipe-vec-reset test-scalar-pipe-vec-wrong-path
 
-VEC_VADD_RTL := $(VEC_STUB_RTL) rtl/vector/rv32_vec_vadd_engine.sv
+VEC_SIM_DEFS ?=
+VEC_VADD_RTL := $(VEC_SIM_DEFS) $(VEC_STUB_RTL) rtl/vector/rv32_vec_vadd_engine.sv
 test-vector-vadd-directed:
 	@mkdir -p $(SIM_BUILD)
 	iverilog -g2012 -s tb_vector_vadd -Ptb_vector_vadd.MODE=0 -o $(SIM_BUILD)/tb_vector_vadd.vvp $(VEC_VADD_RTL) tb/integration/tb_vector_vadd.sv
@@ -298,6 +299,27 @@ test-vector-regression: test-scalar-pipe-vec-stub-all test-vector-vadd-all test-
 
 # One final acceptance command after a milestone is stable.
 test-full-regression: test-scalar-regression test-vector-regression lint check docs-check
+
+# PPA configurations use the protected reference core for scalar and the
+# experimental pipe plus parameterized real vector endpoint for dense/sparse.
+synth-scalar:
+	$(PYTHON) scripts/ppa_flow.py --config scalar
+
+synth-vector-dense:
+	$(PYTHON) scripts/ppa_flow.py --config dense
+
+synth-vector-sparse:
+	$(PYTHON) scripts/ppa_flow.py --config sparse
+
+synth-compare ppa-report ppa-all:
+	$(PYTHON) scripts/ppa_flow.py --all
+
+test-config-scalar: test-repo test-scalar-directed
+
+test-config-dense:
+	$(MAKE) --no-print-directory VEC_SIM_DEFS=-DSPARROWV_DENSE_ONLY test-vector-vadd-all test-vector-vdot-all test-vector-vmem-all test-workload-dense
+
+test-config-sparse: test-vector-regression
 
 check:
 	$(PYTHON) scripts/check_repo.py --all

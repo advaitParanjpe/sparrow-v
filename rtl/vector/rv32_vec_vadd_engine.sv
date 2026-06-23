@@ -4,7 +4,12 @@ module rv32_vec_vadd_engine #(
   parameter integer LATENCY = 3,
   parameter integer VLEN = 32, parameter integer LANES = 4,
   parameter integer SEW = 8, parameter integer VREG_COUNT = 32,
-  parameter integer SCRATCHPAD_BYTES = 256
+  parameter integer SCRATCHPAD_BYTES = 256,
+`ifdef SPARROWV_DENSE_ONLY
+  parameter bit ENABLE_SPARSE = 1'b0
+`else
+  parameter bit ENABLE_SPARSE = 1'b1
+`endif
 ) (
   input logic clk, rst_n,
   input logic vec_cmd_valid, output logic vec_cmd_ready,
@@ -90,7 +95,7 @@ module rv32_vec_vadd_engine #(
   assign dbg_vreg_write_addr = vd_q; assign dbg_vreg_write_data = result_q;
   assign dbg_spad_write_valid = vec_cpl_valid && vec_cpl_ready && store_write_q && status_q == 0;
   assign dbg_spad_write_addr = store_addr_q; assign dbg_spad_write_data = store_data_q;
-  assign dbg_vsdot_mul_exec_valid = vec_cpl_valid && vec_cpl_ready && sparse_q && status_q == 0;
+  assign dbg_vsdot_mul_exec_valid = ENABLE_SPARSE && vec_cpl_valid && vec_cpl_ready && sparse_q && status_q == 0;
   assign dbg_vsdot_mul_skip_valid = dbg_vsdot_mul_exec_valid;
 
   always_ff @(posedge clk) begin
@@ -118,7 +123,7 @@ module rv32_vec_vadd_engine #(
           for (lane=0; lane<LANES; lane=lane+1) result_q[lane*SEW +: SEW] <= vregs[vec_cmd_vs1][lane*SEW +: SEW] + vregs[vec_cmd_vs2][lane*SEW +: SEW];
         end else if (vec_cmd_op_class == VDOT8_OP) begin
           scalar_result_q <= dot8(vregs[vec_cmd_vs1], vregs[vec_cmd_vs2]);
-        end else if (vec_cmd_op_class == VSDOT8_OP) begin
+        end else if (ENABLE_SPARSE && vec_cmd_op_class == VSDOT8_OP) begin
           if (vec_cmd_funct[7:5] <= 3'b101) begin
             sparse_q <= 1;
             scalar_result_q <= sdot8(vregs[vec_cmd_vs1], vregs[vec_cmd_vs2], vec_cmd_funct[7:5]);

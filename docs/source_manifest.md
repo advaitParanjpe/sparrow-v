@@ -43,6 +43,7 @@ The original planning documents remain unmodified in `sparrow-v-project-plan/` a
 - [Phase 1 trap behavior](architecture/trap_behavior.md)
 - [Phase 1 verification plan](verification/scalar_phase_1.md)
 - [Phase 1 scalar baseline report](build_reports/phase_1_scalar_baseline.md)
+- [Generic synthesis PPA evaluation](architecture/synthesis_ppa_evaluation.md)
 - [Phase 1.5 scalar audit](build_reports/phase_1_5_audit.md)
 - [Phase 1.6 fetch frontend](architecture/fetch_frontend.md)
 - [Phase 1.7 pipeline proof](build_reports/phase_1_7_pipeline_proof.md)

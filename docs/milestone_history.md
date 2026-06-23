@@ -114,6 +114,26 @@ Append completed, human-reviewed milestones below. Pending-review implementation
 
 ## Entry template
 
+### Scalar vs Dense-Vector vs Sparse-Vector Synthesis and PPA Evaluation — 2026-06-23
+
+- Reference: uncommitted working-tree evidence; no commit was created.
+- Summary: added explicit scalar/dense/sparse synthesis tops and ordered
+  manifests, parameterized sparse removal for dense, reproducible Yosys generic
+  mapping, and machine/human-readable comparison generation.
+- Key files: `rtl/top/sparrowv_ppa_tops.sv`,
+  `rtl/vector/rv32_vec_vadd_engine.sv`, `scripts/ppa_flow.py`,
+  `synth/yosys/manifests/`, and `config/ppa_configurations.json`.
+- Tests and measurements: scalar/dense/sparse configuration suites and
+  `make ppa-all` passed. Generic counts: 14,029/62,928/65,691 cells; sparse is
+  +4.39% over dense. Dense and sparse FC workloads are both 484 cycles; sparse
+  halves observed multiplication work but fixed endpoint latency prevents a
+  cycle reduction.
+- Known limitations: generic cmos2 counts only; no Liberty, STA, physical area,
+  power, OpenLane/OpenROAD, or SRAM macro mapping. `rv32_core_pipe` remains
+  experimental and is not promoted.
+- Follow-up work: use a characterized open library/physical flow only after a
+  separately scoped implementation milestone.
+
 ### Milestone name — YYYY-MM-DD
 
 - Reference: user-added commit hash or working-tree reference.

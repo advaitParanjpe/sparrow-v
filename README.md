@@ -6,11 +6,11 @@ Sparrow-V is a planned compact RV32I processor with a tightly coupled custom vec
 
 ## Current phase
 
-**Phase 1 — scalar RV32I baseline.** The protected production/reference scalar
-core and directed simulation are implemented. An experimental pipeline-only
-Custom-0 command/completion adapter and deterministic stub exercise the future
-vector boundary; real vector, sparse, and scratchpad implementation has not
-started.
+**Experimental scalar/vector evaluation.** The protected scalar reference core
+remains the production/reference implementation. The experimental pipeline has
+dense and 2:4 sparse vector execution, a 32-register vector file, and a
+256-byte scratchpad. Generic-Yosys comparison evidence is available; it is not
+physical timing, power, or tapeout evidence.
 
 ## Planned subsystems
 
@@ -50,6 +50,10 @@ make test-scalar-pipe-store-retire
 make test-scalar-diff-store-retire
 make test-scalar-pipe-vec-stub-all
 make test-full-regression
+make ppa-all
+make test-config-scalar
+make test-config-dense
+make test-config-sparse
 ```
 
 `check-scalar-throughput-experiment` (legacy alias `test-scalar-pipeline`) is a non-blocking historical Phase 1.7 experiment. It instantiates the production/reference core and intentionally fails its sustained-throughput target; it is not a required correctness regression.
@@ -65,3 +69,6 @@ read-only Codex completion audit is not the normal path. Human review and a
 manual commit remain required.
 
 The planning source manifest is [docs/source_manifest.md](docs/source_manifest.md). Architectural choices that still require approval are tracked in [docs/architecture/open_questions.md](docs/architecture/open_questions.md) and `docs/decisions/`.
+
+The reproducible generic synthesis comparison and its limitations are in
+[docs/architecture/synthesis_ppa_evaluation.md](docs/architecture/synthesis_ppa_evaluation.md).

@@ -71,7 +71,22 @@
 Vector ISA expansion, INT16 lanes, masks, configurable reductions beyond fixed
 VDOT8, scratchpad banking, external memory interfaces, DMA, vector lengths
 beyond 32 bits, gather/scatter, formal verification, synthesis, FPGA, and
-ASIC/OpenLane flows.
+ASIC/OpenLane flows. Generic Yosys PPA comparison is now implemented; physical
+area, STA, power, FPGA, and ASIC/OpenLane evidence remain unavailable.
+
+## Generic synthesis evaluation
+
+- `make ppa-all` runs one deterministic Yosys generic `cmos2` mapping flow for
+  protected scalar, dense-vector, and sparse-vector synthesis tops. Ordered
+  manifests, machine-readable JSON, and a Markdown comparison are generated
+  under ignored `results/ppa/`.
+- Current generic counts are scalar 14,029, dense 62,928, and sparse 65,691
+  cells. Sparse adds 2,763 cells (4.39%) over dense. The vector file and
+  scratchpad total 3,072 bits and are flip-flop/mux mapped, not SRAM macros.
+- No characterized library or switching activity is installed. Slack, Fmax,
+  mapped area, and power remain explicitly unavailable; logic depth is only a
+  Yosys structural proxy. See
+  [synthesis PPA evaluation](architecture/synthesis_ppa_evaluation.md).
 
 ## Important sources and commands
 

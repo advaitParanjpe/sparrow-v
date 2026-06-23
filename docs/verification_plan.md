@@ -2,6 +2,13 @@
 
 ## Checks available now
 
+- Configuration/PPA checks: `make test-config-scalar`,
+  `make test-config-dense`, and `make test-config-sparse` validate the bounded
+  relevant functional suites. `make ppa-all` validates manifests while
+  synthesizing each explicit top, requires Yosys, rejects simulation sources,
+  and emits parsed JSON/Markdown metrics. Dense tests define
+  `SPARROWV_DENSE_ONLY`; sparse defaults remain unchanged.
+
 - `make check`: repository structure/documentation validation.
 - `make test-repo`: Python repository/reference tests.
 - `make test-scalar-directed`: self-checking production scalar directed simulation, including delayed/backpressured memory behavior.
